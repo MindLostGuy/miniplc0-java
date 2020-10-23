@@ -72,23 +72,23 @@ public class Tokenizer {
         token.setValue(s);
         token.setEndPos(it.currentPos());
         switch (s){
-            case "Begin":
+            case "begin":
                 token.setTokenType(TokenType.Begin);
                 break;
 
-            case "End":
+            case "end":
                 token.setTokenType(TokenType.End);
                 break;
 
-            case "Var":
+            case "var":
                 token.setTokenType(TokenType.Var);
                 break;
 
-            case "Const":
+            case "const":
                 token.setTokenType(TokenType.Const);
                 break;
 
-            case "Print":
+            case "print":
                 token.setTokenType(TokenType.Print);
                 break;
 
