@@ -252,6 +252,7 @@ public final class Analyser {
 
             // 下个 token 是等于号吗？如果是的话分析初始化
             if(nextIf(TokenType.Equal)!=null){
+                instructions.add(new Instruction(Operation.LIT, 0));
                 analyseExpression();
                 initialized = true;
             }
