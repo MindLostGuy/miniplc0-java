@@ -354,6 +354,7 @@ public final class Analyser {
         // 分析这个语句
 
         // 标识符是什么？
+        Token peeked = peek();
         String name = peekedToken.getValueString();
         var symbol = symbolTable.get(name);
         if (symbol == null) {
@@ -367,9 +368,9 @@ public final class Analyser {
         expect(TokenType.Equal);
         analyseExpression();
         // 设置符号已初始化
-        initializeSymbol(name, peekedToken.getStartPos());
+        initializeSymbol(name, peeked.getStartPos());
         // 把结果保存
-        var offset = getOffset(name, peekedToken.getStartPos());
+        var offset = getOffset(name, peeked.getStartPos());
         instructions.add(new Instruction(Operation.STO, offset));
     }
 
