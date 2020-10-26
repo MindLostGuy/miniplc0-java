@@ -367,6 +367,7 @@ public final class Analyser {
         next();
         expect(TokenType.Equal);
         analyseExpression();
+        expect(TokenType.Semicolon);
         // 设置符号已初始化
         initializeSymbol(name, peeked.getStartPos());
         // 把结果保存
