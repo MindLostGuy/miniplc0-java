@@ -1,80 +1,81 @@
 package miniplc0java.tokenizer;
 
 public enum TokenType {
-    /** 空 */
-    None,
+    /** fn */
+    FN_KW,
+    /** let */
+    LET_KW,
+    /** const */
+    CONST_KW,
+    /** as */
+    AS_KW,
+    /** while */
+    WHILE_KW,
+    /** if */
+    IF_KW,
+    /** else */
+    ELSE_KW,
+    /** return */
+    RETURN_KW,
+    /** 拓展 break */
+    BREAK_KW,
+    /** 拓展 continue */
+    CONTINUE_KW,
     /** 无符号整数 */
-    Uint,
+    UINT_LITERAL,
+    /** 字符串常量 */
+    STRING_LITERAL,
+    /** 拓展 浮点数常量 */
+    DOUBLE_LITERAL,
+    /** 拓展 字符常量 */
+    CHAR_LITERAL,
     /** 标识符 */
-    Ident,
-    /** Begin */
-    Begin,
-    /** End */
-    End,
-    /** Var */
-    Var,
-    /** Const */
-    Const,
-    /** Print */
-    Print,
+    IDENT,
     /** 加号 */
-    Plus,
+    PLUS,
     /** 减号 */
-    Minus,
+    MINUS,
     /** 乘号 */
-    Mult,
+    MUL,
     /** 除号 */
-    Div,
-    /** 等号 */
-    Equal,
-    /** 分号 */
-    Semicolon,
+    DIV,
+    /** = */
+    ASSIGN,
+    /** == */
+    EQ,
+    /** 不等号 != */
+    NEQ,
+    /** < */
+    LT,
+    /** > */
+    GT,
+    /** <= */
+    LE,
+    /** >= */
+    GE,
     /** 左括号 */
-    LParen,
+    L_PAREN,
     /** 右括号 */
-    RParen,
-    /** 文件尾 */
+    R_PAREN,
+    /** { */
+    L_BRACE,
+    /** } */
+    R_BRACE,
+    /** -> */
+    ARROW,
+    /** , */
+    COMMA,
+    /** , */
+    COLON,
+    /** 分号 */
+    SEMICOLON,
+    /** 扩展 注释 */
+    COMMENT,
+    /** EOF */
     EOF;
 
     @Override
     public String toString() {
-        switch (this) {
-            case None:
-                return "NullToken";
-            case Begin:
-                return "Begin";
-            case Const:
-                return "Const";
-            case Div:
-                return "DivisionSign";
-            case EOF:
-                return "EOF";
-            case End:
-                return "End";
-            case Equal:
-                return "EqualSign";
-            case Ident:
-                return "Identifier";
-            case LParen:
-                return "LeftBracket";
-            case Minus:
-                return "MinusSign";
-            case Mult:
-                return "MultiplicationSign";
-            case Plus:
-                return "PlusSign";
-            case Print:
-                return "Print";
-            case RParen:
-                return "RightBracket";
-            case Semicolon:
-                return "Semicolon";
-            case Uint:
-                return "UnsignedInteger";
-            case Var:
-                return "Var";
-            default:
-                return "InvalidToken";
-        }
+        return this.name();
     }
 }
