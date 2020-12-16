@@ -1,0 +1,22 @@
+Line: 0 Column: 0 Type: IDENT Value: bac123
+Line: 1 Column: 0 Type: PLUS Value: +
+Line: 1 Column: 2 Type: MINUS Value: -
+Line: 1 Column: 4 Type: MUL Value: *
+Line: 1 Column: 6 Type: DIV Value: /
+Line: 2 Column: 0 Type: GT Value: >
+Line: 2 Column: 3 Type: ARROW Value: ->
+Line: 2 Column: 6 Type: GE Value: >=
+Line: 2 Column: 8 Type: GT Value: >
+Line: 3 Column: 1 Type: CHAR_LITERAL Value: 1
+Line: 4 Column: 1 Type: CHAR_LITERAL Value: "
+Line: 5 Column: 1 Type: CHAR_LITERAL Value: '
+Line: 6 Column: 1 Type: CHAR_LITERAL Value: 
+
+Line: 7 Column: 1 Type: CHAR_LITERAL Value: \
+Line: 8 Column: 1 Type: STRING_LITERAL Value: 123
+Line: 9 Column: 1 Type: STRING_LITERAL Value: 123
+
+Line: 10 Column: 1 Type: STRING_LITERAL Value: 
+Line: 11 Column: 1 Type: STRING_LITERAL Value:  1
+Line: 12 Column: 1 Type: STRING_LITERAL Value: "'\
+Line: 13 Column: 0 Type: IDENT Value: _555

@@ -1,8 +1,13 @@
 package miniplc0java.analyser;
 
 public class SymbolEntry {
+    String name;
+    SymbolType type;
     boolean isConstant;
     boolean isInitialized;
+    boolean isGlobal;
+    boolean isParam;
+    int level;
     int stackOffset;
 
     /**

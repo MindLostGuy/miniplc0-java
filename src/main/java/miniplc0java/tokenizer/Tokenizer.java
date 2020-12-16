@@ -12,8 +12,6 @@ public class Tokenizer {
     public Tokenizer(StringIter it) {
         this.it = it;
     }
-
-    // 这里本来是想实现 Iterator<Token> 的，但是 Iterator 不允许抛异常，于是就这样了
     /**
      * 获取下一个 Token
      * 
@@ -85,14 +83,14 @@ public class Tokenizer {
                 else{
                     s+= peek;
                 }
-                if(it.nextChar() != '\''){
-                    throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
-                }
-                else {
-                    break;
-                }
+                it.nextChar();
             }
-            else throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
+            if(it.nextChar() != '\''){
+                throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
+            }
+            else {
+                break;
+            }
         }
         token.setValue(s);
         token.setEndPos(it.currentPos());
@@ -106,11 +104,11 @@ public class Tokenizer {
         Token token=new Token(TokenType.STRING_LITERAL, "", it.currentPos(), it.currentPos());
         while(!it.isEOF()){
             peek = it.peekChar();
-            if(peek != '\"' && peek != '\r' && peek != '\n' && peek != '\t'){
+            if(peek != '"' && peek != '\r' && peek != '\n' && peek != '\t'){
                 if(peek == '\\'){
                     it.nextChar();
                     peek = it.peekChar();
-                    if(peek != '\"' && peek != '\\' && peek != '\'' && peek != 'n' && peek != 't' && peek != 'r'){
+                    if(peek != '"' && peek != '\\' && peek != '\'' && peek != 'n' && peek != 't' && peek != 'r'){
                         throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
                     }
                     else {
@@ -118,7 +116,7 @@ public class Tokenizer {
                             case '\\':
                                 s+= '\\';
                                 break;
-                            case '\"':
+                            case '"':
                                 s+= '\"';
                                 break;
                             case '\'':
@@ -142,7 +140,7 @@ public class Tokenizer {
                     it.nextChar();
                 }
             }
-            else if(peek == '\"'){
+            else if(peek == '"'){
                 it.nextChar();
                 break;
             }
@@ -219,11 +217,6 @@ public class Tokenizer {
             default:
                 break;
         }
-        // 尝试将存储的字符串解释为关键字
-        // -- 如果是关键字，则返回关键字类型的 token
-        // -- 否则，返回标识符
-        //
-        // Token 的 Value 应填写标识符或关键字的字符串
         return token;
     }
 
