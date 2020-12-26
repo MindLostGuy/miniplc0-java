@@ -16,10 +16,6 @@ public class Instruction {
         this.x = x;
     }
 
-    public Instruction() {
-        this.opt = Operation.LIT;
-        this.x = 0;
-    }
 
     @Override
     public boolean equals(Object o) {
@@ -52,22 +48,29 @@ public class Instruction {
         this.x = x;
     }
 
-    @Override
-    public String toString() {
-        switch (this.opt) {
-            case ADD:
-            case DIV:
-            case ILL:
-            case MUL:
-            case SUB:
-            case WRT:
-                return String.format("%s", this.opt);
-            case LIT:
-            case LOD:
-            case STO:
-                return String.format("%s %s", this.opt, this.x);
+    boolean haveParam(){
+        switch (opt){
+            case PUSH:
+            case POPN:
+            case LOCA:
+            case ARGA:
+            case GLOBA:
+            case STACK_ALLOC:
+            case BR:
+            case BR_FALSE:
+            case BR_TRUE:
+            case CALL:
+            case CALL_NAME:
+                return true;
             default:
-                return "ILL";
+                return false;
         }
     }
+
+
+
+//    @Override
+//    public String toString() {
+//
+//    }
 }

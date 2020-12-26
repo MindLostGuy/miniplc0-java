@@ -60,4 +60,17 @@ public class Symboler {
         return offset;
     }
 
+    public void popAbove(int level)
+    {
+        SymbolEntry tmp;
+        int size = SymbolTable.size();
+        for(int i=0;i<size;i++){
+            tmp = SymbolTable.get(i);
+            if(tmp.level >= level){
+                size--;
+                SymbolTable.remove(i--);
+            }
+        }
+    }
+
 }

@@ -124,7 +124,7 @@ public final class Analyser {
 
     private void analyseFunc() throws CompileError {
         // function -> 'fn' IDENT '(' function_param_list? ')' '->' ty block_stmt
-        next();
+        expect(TokenType.FN_KW);
         Token tmp = expect(TokenType.IDENT);
         curFunc = new FunctionDef();
         if(symboler.checkGlo(tmp.getValueString()))
@@ -203,6 +203,52 @@ public final class Analyser {
         //给函数后续的break等判断留位置
     }
 
+    /*
+    stmt ->
+    expr_stmt
+    | decl_stmt
+    | if_stmt
+    | while_stmt
+    | break_stmt
+    | continue_stmt
+    | return_stmt
+    | block_stmt
+    | empty_stmt
+    */
+    private void analyseStmt(int level) throws CompileError{
+        Token peek = peek();
+        switch (peek.getTokenType())
+        {
+            case LET_KW:
+            case CONST_KW:
+                analyseDecl_stmt(level);
+                break;
+            case IF_KW:
+                analyseIf_stmt(level);
+                break;
+            case WHILE_KW:
+                analyseWhile_stmt(level);
+                break;
+            case BREAK_KW:
+                analyseBreak_stmt(level);
+                break;
+            case CONTINUE_KW:
+                analyseContinue_stmt(level);
+                break;
+            case RETURN_KW:
+                analyseReturn_stmt(level);
+                break;
+            case L_BRACE:
+                analyseBlock_stmt(level+1);
+                break;
+            case SEMICOLON:
+                expect(TokenType.SEMICOLON);
+                break;
+            default:
+                analyseExpr_stmt(level);
+        }
+    }
+
     private void analyseDecl_stmt(int level) throws CompileError {
         // decl_stmt -> let_decl_stmt | const_decl_stmt
         if (peek().getTokenType() == TokenType.LET_KW) {
@@ -215,18 +261,111 @@ public final class Analyser {
 
     private void analyseLet_decl_stmt(int level) throws CompileError {
         //let_decl_stmt -> 'let' IDENT ':' ty ('=' expr)? ';'
-        next();
-
-
+        expect(TokenType.LET_KW);
+        Token token = expect(TokenType.IDENT);
+        String name = (String)token.getValue();
+        expect(TokenType.COLON);
+        Token type = expect(TokenType.IDENT);
+        SymbolType ty = ToTyTokenType(type);
+        if(ty == SymbolType.VOID)
+            throw new AnalyzeError(ErrorCode.InvalidType,type.getStartPos());
+        boolean isGlo = false;
+        if(level == 0){
+            isGlo = true;
+        }
+        SymbolEntry symbolEntry = new SymbolEntry(name,ty,false,false,
+                isGlo,false,level,0);
+        int offset = symboler.getStackOffset(symbolEntry);
+        symbolEntry.stackOffset = offset;
+        symboler.addSymbol(symbolEntry);
+        if(nextIf(TokenType.ASSIGN) != null){
+            symbolEntry.isInitialized = true;
+            //存储变量域
+            analyseExpr();
+            //存储变量值
+            //判断是否是同一类型返回值
+        }
+        if(level > 0)
+        {
+            curFunc.locs = Math.max(curFunc.locs, offset);
+        }
+        expect(TokenType.SEMICOLON);
     }
 
     private void analyseConst_decl_stmt(int level) throws CompileError {
         //const_decl_stmt -> 'const' IDENT ':' ty '=' expr ';'
-        next();
-
+        expect(TokenType.CONST_KW);
+        Token token = expect(TokenType.IDENT);
+        String name = (String)token.getValue();
+        expect(TokenType.COLON);
+        Token type = expect(TokenType.IDENT);
+        SymbolType ty = ToTyTokenType(type);
+        if(ty == SymbolType.VOID)
+            throw new AnalyzeError(ErrorCode.InvalidType,type.getStartPos());
+        boolean isGlo = false;
+        if(level == 0){
+            isGlo = true;
+        }
+        SymbolEntry symbolEntry = new SymbolEntry(name,ty,true,false,
+                isGlo,false,level,0);
+        int offset = symboler.getStackOffset(symbolEntry);
+        symbolEntry.stackOffset = offset;
+        symboler.addSymbol(symbolEntry);
+        expect(TokenType.ASSIGN);
+        symbolEntry.isInitialized = true;
+            //存储变量域
+        analyseExpr();
+            //存储变量值
+            //判断是否是同一类型返回值
+        if(level > 0)
+        {
+            curFunc.locs = Math.max(curFunc.locs, offset);
+        }
+        expect(TokenType.SEMICOLON);
     }
 
-    private void analyseBlock_stmt(int level)
+    // if_stmt -> 'if' expr block_stmt ('else' 'if' expr block_stmt)* ('else' block_stmt)?
+    private void analyseIf_stmt(int level) throws CompileError {
+    }
+
+    // block_stmt -> '{' stmt* '}'
+    private void analyseBlock_stmt(int level) throws CompileError {
+        expect(TokenType.L_BRACE);
+        while(peek().getTokenType() != TokenType.R_BRACE)
+        {
+            analyseStmt(level);
+        }
+        expect(TokenType.R_BRACE);
+        symboler.popAbove(level);
+    }
+
+    // expr_stmt -> expr ';'
+    private void analyseExpr_stmt(int level) throws CompileError{
+        analyseExpr();
+        expect(TokenType.SEMICOLON);
+    }
+
+    // while_stmt -> 'while' expr block_stmt
+    private void analyseWhile_stmt(int level) throws CompileError{
+        expect(TokenType.WHILE_KW);
+        analyseExpr();
+        analyseBlock_stmt(level+1);
+    }
+
+    // return_stmt -> 'return' expr? ';'
+    private void analyseReturn_stmt(int level) throws CompileError{
+    }
+
+    // break_stmt -> 'break' ';'
+    private void analyseBreak_stmt(int level) throws CompileError{
+    }
+
+    // continue_stmt -> 'continue' ';'
+    private void analyseContinue_stmt(int level) throws CompileError{
+    }
+
+
+    private void analyseExpr() throws CompileError
     {
 
     }
