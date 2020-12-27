@@ -354,6 +354,15 @@ public final class Analyser {
 
     // return_stmt -> 'return' expr? ';'
     private void analyseReturn_stmt(int level) throws CompileError{
+        expect(TokenType.RETURN_KW);
+        switch (curFunc.retType){
+            case VOID:
+                break;
+            case INT:
+            case DOUBLE:
+                analyseExpr();
+        }
+        expect(TokenType.SEMICOLON);
     }
 
     // break_stmt -> 'break' ';'
@@ -363,6 +372,7 @@ public final class Analyser {
     // continue_stmt -> 'continue' ';'
     private void analyseContinue_stmt(int level) throws CompileError{
     }
+
 
 
     private void analyseExpr() throws CompileError
