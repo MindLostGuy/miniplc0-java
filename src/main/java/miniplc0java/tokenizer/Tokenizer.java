@@ -159,7 +159,37 @@ public class Tokenizer {
             digit+=it.peekChar();
             it.nextChar();
         }
-        token.setValue(Integer.parseInt(digit));
+        if(it.peekChar() == '.'){
+            digit += it.nextChar();
+            token.setTokenType(TokenType.DOUBLE_LITERAL);
+            char peek = it.peekChar();
+            if(!Character.isDigit(peek)){
+                throw new TokenizeError(ErrorCode.ExpectedToken,it.currentPos());
+            }
+            while(Character.isDigit(peek)){
+                digit += it.nextChar();
+                peek = it.peekChar();
+            }
+            if(peek == 'e' || peek == 'E'){
+                digit += it.nextChar();
+                peek = it.peekChar();
+                if(peek == '+' || peek == '-'){
+                    digit += it.nextChar();
+                    peek = it.peekChar();
+                }
+                if(!Character.isDigit(peek)){
+                    throw new TokenizeError(ErrorCode.ExpectedToken,it.currentPos());
+                }
+                while(Character.isDigit(peek)){
+                    digit += it.nextChar();
+                    peek = it.peekChar();
+                }
+            }
+            token.setValue(Double.parseDouble(digit));
+        }
+        else {
+            token.setValue(Integer.parseInt(digit));
+        }
         token.setEndPos(it.currentPos());
         return token;
     }
@@ -236,6 +266,10 @@ public class Tokenizer {
                 return new Token(TokenType.MUL, '*', it.previousPos(), it.currentPos());
 
             case '/':
+                if(it.peekChar() == '/'){
+                    it.nextChar();
+                    return lexCOMMENT();
+                }
                 return new Token(TokenType.DIV, '/', it.previousPos(), it.currentPos());
 
             case '=':
@@ -291,6 +325,19 @@ public class Tokenizer {
             default:
                 throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
         }
+    }
+
+    private Token lexCOMMENT() throws TokenizeError{
+        while (!it.isEOF()){
+            if (it.peekChar() != '\n')
+            {
+                it.nextChar();
+            }
+            else
+                break;
+        }
+        it.nextChar();
+        return nextToken();
     }
 
     private void skipSpaceCharacters() {

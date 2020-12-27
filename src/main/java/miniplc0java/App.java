@@ -95,9 +95,9 @@ public class App {
         } else if (result.getBoolean("analyse")) {
             // analyze
             var analyzer = new Analyser(tokenizer);
-            List<Instruction> instructions;
+            List<Instruction> instructions = null;
             try {
-                instructions = analyzer.analyse();
+               // instructions = analyzer.analyse();
             } catch (Exception e) {
                 // 遇到错误不输出，直接退出
                 System.err.println(e);
