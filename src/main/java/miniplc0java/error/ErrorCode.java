@@ -1,23 +1,22 @@
 package miniplc0java.error;
 
 public enum ErrorCode {
-    NoError, // Should be only used internally.
-    InvalidInput,
-    InvalidIdentifier,
-    IntegerOverflow, // int32_t overflow.
-    NoBegin,
-    NoEnd,
+    IntegerOverflow,
     NeedIdentifier,
     ConstantNeedValue,
     NoSemicolon,
-    InvalidVariableDeclaration,
-    IncompleteExpression,
     NotDeclared,
     AssignToConstant,
     DuplicateDeclaration,
     NotInitialized,
+    InvalidParam,
+    InvalidTypeComparion,
+    InvalidVariableDeclaration,
+    IncompleteExpression,
     InvalidType,
     InvalidAssignment,
     InvalidPrint,
+    InvalidInput,
+    InvalidIdentifier,
     ExpectedToken
 }

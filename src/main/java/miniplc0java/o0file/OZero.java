@@ -24,4 +24,13 @@ public class OZero {
         functionDefList.add(def);
     }
 
+    public FunctionDef findFunc(String name)
+    {
+        for(FunctionDef functionDef:functionDefList){
+            if(functionDef.NAME.equals(name))
+                return functionDef;
+        }
+        return null;
+    }
+
 }
