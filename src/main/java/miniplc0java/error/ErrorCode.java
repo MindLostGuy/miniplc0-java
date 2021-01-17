@@ -5,6 +5,7 @@ public enum ErrorCode {
     NeedIdentifier,
     ConstantNeedValue,
     NoMain,
+    NoReturn,
     NotDeclared,
     ErrorReturn,
     AssignToConstant,

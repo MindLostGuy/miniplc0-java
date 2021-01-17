@@ -184,6 +184,7 @@ public final class Analyser {
         }
         else throw new AnalyzeError(ErrorCode.DuplicateDeclaration,tmp.getStartPos());
         expect(TokenType.L_PAREN);
+        file.addFunc(curFunc);
 
         // function_param -> 'const'? IDENT ':' ty
         // function_param_list -> function_param (',' function_param)*
@@ -233,9 +234,17 @@ public final class Analyser {
 
         int insSize = instructions.size();
 
-        analyseBlock_stmt(1);
+        curFunc.canReturn = false;
+        analyseBlock_stmt(1,true);
 
         //对可能的返回预留指令
+        if(!curFunc.canReturn){
+            if(curFunc.ret == 1){
+                throw new AnalyzeError(ErrorCode.NoReturn,peekedToken.getStartPos());
+            }else if(curFunc.ret == 0){
+                AddIns(Operation.RET);
+            }
+        }
 
         //给Func填指令
         for(int i=insSize;i<instructions.size();i++){
@@ -245,8 +254,6 @@ public final class Analyser {
         while(instructions.size() > insSize){
             instructions.remove(insSize);
         }
-
-        file.addFunc(curFunc);
         //给函数后续的break等判断留位置
     }
 
@@ -262,7 +269,7 @@ public final class Analyser {
     | block_stmt
     | empty_stmt
     */
-    private void analyseStmt(int level) throws CompileError{
+    private void analyseStmt(int level,boolean canExec) throws CompileError{
         Token peek = peek();
         switch (peek.getTokenType())
         {
@@ -271,7 +278,7 @@ public final class Analyser {
                 analyseDecl_stmt(level);
                 break;
             case IF_KW:
-                analyseIf_stmt(level);
+                analyseIf_stmt(level,canExec);
                 break;
             case WHILE_KW:
                 analyseWhile_stmt(level);
@@ -283,10 +290,13 @@ public final class Analyser {
                 analyseContinue_stmt();
                 break;
             case RETURN_KW:
-                analyseReturn_stmt(level);
+                analyseReturn_stmt();
+                if (canExec){
+                    curFunc.canReturn = false;
+                }
                 break;
             case L_BRACE:
-                analyseBlock_stmt(level+1);
+                analyseBlock_stmt(level+1,canExec);
                 break;
             case SEMICOLON:
                 expect(TokenType.SEMICOLON);
@@ -378,21 +388,21 @@ public final class Analyser {
     }
 
     // if_stmt -> 'if' expr block_stmt ('else' 'if' expr block_stmt)* ('else' block_stmt)?
-    private void analyseIf_stmt(int level) throws CompileError {
+    private void analyseIf_stmt(int level,boolean canExec) throws CompileError {
         expect(TokenType.IF_KW);
         analyseExpr();
         int br_false_pos,br_pos;
         br_false_pos = instructions.size();
         AddIns(Operation.BR_FALSE);
-        analyseBlock_stmt(level+1);
+        analyseBlock_stmt(level+1,false);
         br_pos = instructions.size();
         if(nextIf(TokenType.ELSE_KW) != null){
             AddIns(Operation.BR);
             instructions.get(br_false_pos).setX(br_pos - br_false_pos);
             if(check(TokenType.IF_KW)){
-                analyseIf_stmt(level);
+                analyseIf_stmt(level,canExec);
             }else{
-                analyseBlock_stmt(level+1);
+                analyseBlock_stmt(level+1,canExec);
             }
             instructions.get(br_pos).setX(instructions.size() - br_pos-1);
         }else{
@@ -401,11 +411,11 @@ public final class Analyser {
     }
 
     // block_stmt -> '{' stmt* '}'
-    private void analyseBlock_stmt(int level) throws CompileError {
+    private void analyseBlock_stmt(int level,boolean canExec) throws CompileError {
         expect(TokenType.L_BRACE);
         while(peek().getTokenType() != TokenType.R_BRACE)
         {
-            analyseStmt(level);
+            analyseStmt(level,canExec);
         }
         expect(TokenType.R_BRACE);
         symboler.popAbove(level);
@@ -424,13 +434,13 @@ public final class Analyser {
         analyseExpr();
         int br_pos = instructions.size();
         AddIns(Operation.BR_FALSE);
-        analyseBlock_stmt(level+1);
+        analyseBlock_stmt(level+1,false);
         AddIns(Operation.BR,(start - instructions.size() - 1));
         instructions.get(br_pos).setX(instructions.size() - br_pos-1);
     }
 
     // return_stmt -> 'return' expr? ';'
-    private void analyseReturn_stmt(int level) throws CompileError{
+    private void analyseReturn_stmt() throws CompileError{
         expect(TokenType.RETURN_KW);
         switch (curFunc.retType){
             case VOID:
@@ -709,11 +719,14 @@ public final class Analyser {
                 throw new AnalyzeError(ErrorCode.InvalidParam,peekedToken.getStartPos());
             }
         }
-        analyseExpr();
-        //录入值与参数不匹配
-        if(!TypeStack.peek().equals(aimFunc.paramList.get(aimFunc.params-1).type))
+        if(aimFunc.params>0)
         {
-            throw new AnalyzeError(ErrorCode.InvalidParam,peekedToken.getStartPos());
+            analyseExpr();
+            //录入值与参数不匹配
+            if(!TypeStack.peek().equals(aimFunc.paramList.get(aimFunc.params-1).type))
+            {
+                throw new AnalyzeError(ErrorCode.InvalidParam,peekedToken.getStartPos());
+            }
         }
         expect(TokenType.R_PAREN);
         AddIns(Operation.CALL,aimFunc.name);

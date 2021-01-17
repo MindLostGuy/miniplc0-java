@@ -18,6 +18,7 @@ public class FunctionDef {
     public SymbolType retType;
     public List<SymbolEntry> paramList ;
     public List<Instruction> instructions ;
+    public boolean canReturn;
 
     public FunctionDef()
     {
