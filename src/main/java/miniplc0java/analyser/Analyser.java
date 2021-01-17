@@ -292,7 +292,7 @@ public final class Analyser {
             case RETURN_KW:
                 analyseReturn_stmt();
                 if (canExec){
-                    curFunc.canReturn = false;
+                    curFunc.canReturn = true;
                 }
                 break;
             case L_BRACE:
