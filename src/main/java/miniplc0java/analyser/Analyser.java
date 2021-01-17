@@ -240,7 +240,7 @@ public final class Analyser {
         //对可能的返回预留指令
         if(!curFunc.canReturn){
             if(curFunc.ret == 1){
-                throw new AnalyzeError(ErrorCode.NoReturn,peekedToken.getStartPos());
+                throw new AnalyzeError(ErrorCode.NoReturn,peek().getStartPos());
             }else if(curFunc.ret == 0){
                 AddIns(Operation.RET);
             }

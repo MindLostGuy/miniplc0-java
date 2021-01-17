@@ -26,6 +26,7 @@ public class FunctionDef {
         this.params = 0;
         this.locs = 0;
         this.body_size = 0;
+        this.canReturn = false;
         this.paramList = new ArrayList<>();
         this.instructions = new ArrayList<>();
     }
