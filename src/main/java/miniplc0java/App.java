@@ -1,11 +1,6 @@
 package miniplc0java;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.PrintStream;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -27,7 +22,7 @@ import net.sourceforge.argparse4j.inf.ArgumentParserException;
 import net.sourceforge.argparse4j.inf.Namespace;
 
 public class App {
-    public static void main(String[] args) throws CompileError {
+    public static void main(String[] args) throws CompileError{
         var argparse = buildArgparse();
         Namespace result;
         try {
@@ -85,8 +80,9 @@ public class App {
                     tokens.add(token);
                 }
             } catch (Exception e) {
-                // 遇到错误不输出，直接退出
-                System.err.println(e);
+                for(StackTraceElement s:e.getStackTrace()){
+                    System.err.println(s);
+                }
                 System.exit(-1);
                 return;
             }
@@ -96,18 +92,17 @@ public class App {
         } else if (result.getBoolean("analyse")) {
             // analyze
             var analyzer = new Analyser(tokenizer);
-            List<Instruction> instructions = null;
+            List<Instruction> instructions;
             try {
-               instructions = analyzer.analyse();
+                instructions = analyzer.analyse();
             } catch (Exception e) {
-                // 遇到错误不输出，直接退出
                 output.close();
                 scanner.close();
                 System.err.println(e);
                 for(StackTraceElement s:e.getStackTrace()){
                     System.err.println(s);
                 }
-                System.exit(-2);
+                System.exit(-1);
                 return;
             }
             try {

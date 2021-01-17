@@ -65,7 +65,7 @@ public enum TokenType {
     ARROW,
     /** , */
     COMMA,
-    /** , */
+    /** : */
     COLON,
     /** 分号 */
     SEMICOLON,
