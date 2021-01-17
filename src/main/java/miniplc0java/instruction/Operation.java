@@ -1,5 +1,7 @@
 package miniplc0java.instruction;
 
+import miniplc0java.util.ByteOper;
+
 public enum Operation {
     NOP(0x00),
     PUSH(0x01),
@@ -64,5 +66,11 @@ public enum Operation {
     private int num;
     private Operation(int value){
         this.num = value;
+    }
+    public byte[] getVal()
+    {
+        byte[] a = new byte[1];
+        a[0] = (byte) num;
+        return a;
     }
 }

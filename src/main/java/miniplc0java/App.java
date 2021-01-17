@@ -7,6 +7,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 
@@ -86,7 +87,7 @@ public class App {
             } catch (Exception e) {
                 // 遇到错误不输出，直接退出
                 System.err.println(e);
-                System.exit(0);
+                System.exit(-1);
                 return;
             }
             for (Token token : tokens) {
@@ -97,15 +98,27 @@ public class App {
             var analyzer = new Analyser(tokenizer);
             List<Instruction> instructions = null;
             try {
-               // instructions = analyzer.analyse();
+               instructions = analyzer.analyse();
             } catch (Exception e) {
                 // 遇到错误不输出，直接退出
+                output.close();
+                scanner.close();
                 System.err.println(e);
-                System.exit(0);
+                for(StackTraceElement s:e.getStackTrace()){
+                    System.err.println(s);
+                }
+                System.exit(-2);
                 return;
             }
-            for (Instruction instruction : instructions) {
-                output.println(instruction.toString());
+            try {
+                output.write(analyzer.file.toBytes());
+                output.close();
+                scanner.close();
+            } catch (Exception e) {
+                output.close();
+                scanner.close();
+                System.err.println(Arrays.toString(e.getStackTrace()));
+                System.exit(-1);
             }
         } else {
             System.err.println("Please specify either '--analyse' or '--tokenize'.");

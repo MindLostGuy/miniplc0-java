@@ -8,6 +8,7 @@ import miniplc0java.error.TokenizeError;
 import miniplc0java.instruction.Instruction;
 import miniplc0java.instruction.Operation;
 import miniplc0java.o0file.FunctionDef;
+import miniplc0java.o0file.GlobalDef;
 import miniplc0java.o0file.OZero;
 import miniplc0java.tokenizer.Token;
 import miniplc0java.tokenizer.TokenType;
@@ -22,7 +23,7 @@ public final class Analyser {
     ArrayList<Instruction> instructions;
     Symboler symboler = new Symboler();
     FunctionDef curFunc;
-    OZero file = new OZero();
+    public OZero file = new OZero();
     Stack<SymbolType> TypeStack = new Stack<>();
 
     /** 当前偷看的 token */
@@ -31,6 +32,14 @@ public final class Analyser {
     public Analyser(Tokenizer tokenizer) {
         this.tokenizer = tokenizer;
         this.instructions = new ArrayList<>();
+    }
+
+    public List<Instruction> analyse() throws CompileError {
+        analyseProgram();
+        System.out.println("\n"+symboler);
+        System.out.println(file);
+        System.out.println(Arrays.toString(file.toBytes()));
+        return instructions;
     }
 
 
@@ -110,6 +119,8 @@ public final class Analyser {
     private void analyseProgram() throws CompileError {
         // program -> item*
         // item -> function | decl_stmt
+        symboler.addSymbol(new SymbolEntry("_start",SymbolType.FUNC_NAME,true,false,
+                true,false,0,0));
         while(check(TokenType.FN_KW)||check(TokenType.LET_KW)||check(TokenType.CONST_KW)){
             switch (peek().getTokenType()){
                 case FN_KW:
@@ -120,7 +131,40 @@ public final class Analyser {
                     break;
             }
         }
+        addStartFun();
+        addGlo();
         expect(TokenType.EOF);
+    }
+
+    private void addGlo() throws AnalyzeError {
+        for(SymbolEntry symbol:symboler.SymbolTable){
+            if(symbol.isGlobal && symbol.type != SymbolType.FUNC_NAME){
+                file.addGlo(new GlobalDef(symbol.isConstant,"00000000"));
+            }
+            else if(symbol.isGlobal){
+                file.addGlo(new GlobalDef(true,symbol.name));
+            }
+        }
+    }
+
+    private void addStartFun() throws AnalyzeError {
+        FunctionDef mainFunc = file.findFunc("main");
+        if(mainFunc == null)
+        {
+            throw new AnalyzeError(ErrorCode.NoMain,peekedToken.getStartPos());
+        }
+        AddIns(Operation.CALL,mainFunc.name);
+        FunctionDef functiondef = new FunctionDef();
+        functiondef.NAME = "_start";
+        functiondef.name = 0;
+        functiondef.ret = 0;
+        functiondef.locs = 0;
+        functiondef.instructions.addAll(instructions);
+        functiondef.body_size= instructions.size(); //(length+7)/8;
+        while(instructions.size() > 0){
+            instructions.remove(0);
+        }
+        file.functionDefList.add(0,functiondef);
     }
 
     private void analyseFunc() throws CompileError {
@@ -283,10 +327,13 @@ public final class Analyser {
         symboler.addSymbol(symbolEntry);
         if(nextIf(TokenType.ASSIGN) != null){
             symbolEntry.isInitialized = true;
-            //存储变量域
+            pushVAR(token,false);
             analyseExpr();
-            //存储变量值
-            //判断是否是同一类型返回值
+            AddIns(Operation.STORE64);
+            if(TypeStack.pop() != ty)
+            {
+                throw new AnalyzeError(ErrorCode.InvalidTypeComparion,peekedToken.getStartPos());
+            }
         }
         if(level > 0)
         {
@@ -316,10 +363,13 @@ public final class Analyser {
         symboler.addSymbol(symbolEntry);
         expect(TokenType.ASSIGN);
         symbolEntry.isInitialized = true;
-            //存储变量域
+        pushVAR(token,false);
         analyseExpr();
-            //存储变量值
-            //判断是否是同一类型返回值
+        AddIns(Operation.STORE64);
+        if(TypeStack.pop() != ty)
+        {
+            throw new AnalyzeError(ErrorCode.InvalidTypeComparion,peekedToken.getStartPos());
+        }
         if(level > 0)
         {
             curFunc.locs = Math.max(curFunc.locs, offset);
@@ -329,6 +379,25 @@ public final class Analyser {
 
     // if_stmt -> 'if' expr block_stmt ('else' 'if' expr block_stmt)* ('else' block_stmt)?
     private void analyseIf_stmt(int level) throws CompileError {
+        expect(TokenType.IF_KW);
+        analyseExpr();
+        int br_false_pos,br_pos;
+        br_false_pos = instructions.size();
+        AddIns(Operation.BR_FALSE);
+        analyseBlock_stmt(level+1);
+        br_pos = instructions.size();
+        if(nextIf(TokenType.ELSE_KW) != null){
+            AddIns(Operation.BR);
+            instructions.get(br_false_pos).setX(br_pos - br_false_pos);
+            if(check(TokenType.IF_KW)){
+                analyseIf_stmt(level);
+            }else{
+                analyseBlock_stmt(level+1);
+            }
+            instructions.get(br_pos).setX(instructions.size() - br_pos-1);
+        }else{
+            instructions.get(br_false_pos).setX(br_pos - br_false_pos-1);
+        }
     }
 
     // block_stmt -> '{' stmt* '}'
@@ -336,7 +405,7 @@ public final class Analyser {
         expect(TokenType.L_BRACE);
         while(peek().getTokenType() != TokenType.R_BRACE)
         {
-            analyseStmt(level+1);
+            analyseStmt(level);
         }
         expect(TokenType.R_BRACE);
         symboler.popAbove(level);
@@ -351,8 +420,13 @@ public final class Analyser {
     // while_stmt -> 'while' expr block_stmt
     private void analyseWhile_stmt(int level) throws CompileError{
         expect(TokenType.WHILE_KW);
+        int start = instructions.size();
         analyseExpr();
+        int br_pos = instructions.size();
+        AddIns(Operation.BR_FALSE);
         analyseBlock_stmt(level+1);
+        AddIns(Operation.BR,(start - instructions.size() - 1));
+        instructions.get(br_pos).setX(instructions.size() - br_pos-1);
     }
 
     // return_stmt -> 'return' expr? ';'
@@ -363,8 +437,19 @@ public final class Analyser {
                 break;
             case INT:
             case DOUBLE:
+                if(peek().getValue() == TokenType.SEMICOLON){
+                    throw new AnalyzeError(ErrorCode.ErrorReturn,peekedToken.getStartPos());
+                }
+                AddIns(Operation.ARGA,0);
                 analyseExpr();
+                AddIns(Operation.STORE64);
+                if(TypeStack.pop() != curFunc.retType)
+                {
+                    throw new AnalyzeError(ErrorCode.InvalidTypeComparion,peekedToken.getStartPos());
+                }
+
         }
+        AddIns(Operation.RET);
         expect(TokenType.SEMICOLON);
     }
 

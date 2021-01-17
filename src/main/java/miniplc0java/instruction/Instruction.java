@@ -1,5 +1,7 @@
 package miniplc0java.instruction;
 
+import miniplc0java.util.ByteOper;
+
 import java.util.Objects;
 
 public class Instruction {
@@ -65,6 +67,19 @@ public class Instruction {
             default:
                 return false;
         }
+    }
+
+    public byte[] toBytes(){
+        byte[] res ;
+        res = opt.getVal();
+        if(haveParam()){
+            if(opt == Operation.PUSH){
+                res = ByteOper.byteMerger(res,ByteOper.toBytes(x,8));
+            }else{
+                res = ByteOper.byteMerger(res,ByteOper.toBytes(x,4));
+            }
+        }
+        return res;
     }
 
 
