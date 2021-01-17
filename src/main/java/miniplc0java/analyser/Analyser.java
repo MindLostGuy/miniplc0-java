@@ -607,8 +607,8 @@ public final class Analyser {
             case IDENT:
                 pushIDENT(cur);
                 break;
-            default:
-                throw new AnalyzeError(ErrorCode.InvalidType,cur.getStartPos());
+//            default:
+//                throw new AnalyzeError(ErrorCode.InvalidType,cur.getStartPos());
         }
 
     }
@@ -744,28 +744,33 @@ public final class Analyser {
                 expect(TokenType.L_PAREN);
                 expect(TokenType.R_PAREN);
                 AddIns(Operation.SCAN_I);
+                break;
             }
             case "getdouble" : {
                 expect(TokenType.L_PAREN);
                 expect(TokenType.R_PAREN);
                 AddIns(Operation.SCAN_F);
+                break;
             }
             case "getchar" : {
                 expect(TokenType.L_PAREN);
                 expect(TokenType.R_PAREN);
                 AddIns(Operation.SCAN_C);
+                break;
             }
             case "putint" : {
                 expect(TokenType.L_PAREN);
                 analyseExpr();
                 expect(TokenType.R_PAREN);
                 AddIns(Operation.PRINT_I);
+                break;
             }
             case "putdouble" : {
                 expect(TokenType.L_PAREN);
                 analyseExpr();
                 expect(TokenType.R_PAREN);
                 AddIns(Operation.PRINT_F);
+                break;
             }
             case "putstr" : {
                 expect(TokenType.L_PAREN);
@@ -778,18 +783,21 @@ public final class Analyser {
                     AddIns(Operation.PRINT_C);
                 }
                 expect(TokenType.R_PAREN);
+                break;
             }
             case "putchar" : {
                 expect(TokenType.L_PAREN);
                 analyseExpr();
                 AddIns(Operation.PRINT_C);
                 expect(TokenType.R_PAREN);
+                break;
             }
             case "putln" : {
                 expect(TokenType.L_PAREN);
                 AddIns(Operation.PUSH, (int) '\n');
                 AddIns(Operation.PRINT_C);
                 expect(TokenType.R_PAREN);
+                break;
             }
         }
     }
