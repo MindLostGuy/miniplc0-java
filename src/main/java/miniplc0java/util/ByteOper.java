@@ -20,13 +20,13 @@ public class ByteOper {
         return string.getBytes();
     }
 
-    public static byte[] toBytes(long x, int offset){
-        byte[] res = new byte[offset/8];
-        int len = offset/8;
+    public static byte[] toBytes(long x, int len){
+        byte[] result = new byte[len];
+        int offset = len*8;
         for(int i=0;i<len;i++){
             offset -= 8;
-            res[i] = (byte)((x>>offset)&0xFF);
+            result[i] = (byte)((x>>offset)&0xFF);
         }
-        return res;
+        return result;
     }
 }
