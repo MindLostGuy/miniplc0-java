@@ -203,10 +203,10 @@ public final class Analyser {
             int offset = symboler.getStackOffset(ParamSymbol);
             ParamSymbol.stackOffset = offset;
             symboler.addSymbol(ParamSymbol);
+            curFunc.paramList.add(ParamSymbol);
             if(nextIf(TokenType.COMMA) == null){
                 break;
             }
-            curFunc.paramList.add(ParamSymbol);
         }
         expect(TokenType.R_PAREN);
         expect(TokenType.ARROW);
