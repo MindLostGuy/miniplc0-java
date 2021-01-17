@@ -615,7 +615,7 @@ public final class Analyser {
 
     private void pushUINT(Token token) throws CompileError {
         expect(TokenType.UINT_LITERAL);
-        AddIns(Operation.PUSH,(long)token.getValue());
+        AddIns(Operation.PUSH,(int)token.getValue());
         TypeStack.push(SymbolType.INT);
     }
 
