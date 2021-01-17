@@ -80,6 +80,7 @@ public class App {
                     tokens.add(token);
                 }
             } catch (Exception e) {
+                // 遇到错误不输出，直接退出
                 for(StackTraceElement s:e.getStackTrace()){
                     System.err.println(s);
                 }
@@ -90,12 +91,18 @@ public class App {
                 output.println(token.toString());
             }
         } else if (result.getBoolean("analyse")) {
+//            while (scanner.hasNextLine()){
+//                String str = scanner.nextLine();
+//                System.out.println(str);
+//            }
+//            System.out.println("!@#!#!#!");
             // analyze
             var analyzer = new Analyser(tokenizer);
             List<Instruction> instructions;
             try {
                 instructions = analyzer.analyse();
             } catch (Exception e) {
+                // 遇到错误不输出，直接退出
                 output.close();
                 scanner.close();
                 System.err.println(e);
@@ -106,15 +113,33 @@ public class App {
                 return;
             }
             try {
-                output.write(analyzer.file.toBytes());
+                //byte[] tmp = new byte[]{114, 48, 59, 62, 0, 0, 0, 1, 0, 0, 0, 2, 1, 0, 0, 0, 6, 95, 115, 116, 97, 114, 116, 1, 0, 0, 0, 4, 109, 97, 105, 110, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 72, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 33, 10, 0, 0, 0, 0, 80, 23, 10, 0, 0, 0, 0, 19, 1, 0, 0, 0, 0, 0, 0, 0, 0, 48, 58, 66, 0, 0, 0, 23, 10, 0, 0, 0, 1, 80, 23, 10, 0, 0, 0, 2, 80, 23, 10, 0, 0, 0, 1, 19, 84, 1, 0, 0, 0, 0, 0, 0, 0, 10, 85, 10, 0, 0, 0, 2, 19, 84, 1, 0, 0, 0, 0, 0, 0, 0, 10, 85, 10, 0, 0, 0, 0, 10, 0, 0, 0, 0, 19, 1, 0, 0, 0, 0, 0, 0, 0, 1, 33, 23, 65, -1, -1, -1, -29, 73};
+                //output.write(tmp);
+                output.write(analyzer.program.toBytes());
                 output.close();
                 scanner.close();
             } catch (Exception e) {
+                // 遇到错误不输出，直接退出
                 output.close();
                 scanner.close();
-                System.err.println(Arrays.toString(e.getStackTrace()));
+                System.err.println(e.getStackTrace());
                 System.exit(-1);
+                return;
             }
+            /*
+//            for (Instruction instruction : instructions) {
+//                //output.println(instruction.toString());
+//                //output.format("%-20s %s\n",instruction.toByteString() , instruction.toString());
+//
+//                List<Byte> bytes = new ArrayList<Byte>();
+//                bytes.add((byte) 20);
+//                byte[] bytes1 = {1,2,3};
+//                try{
+//                    output.writeBytes(bytes1);
+//                } catch (Exception e) {
+//                    e.printStackTrace();
+//                }
+//            }*/
         } else {
             System.err.println("Please specify either '--analyse' or '--tokenize'.");
             System.exit(3);

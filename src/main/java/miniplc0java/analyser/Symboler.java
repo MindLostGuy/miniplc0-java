@@ -1,45 +1,66 @@
 package miniplc0java.analyser;
 
+import miniplc0java.error.AnalyzeError;
+import miniplc0java.error.ErrorCode;
+import miniplc0java.util.Pos;
+
 import java.util.ArrayList;
 import java.util.List;
 
 public class Symboler {
-    public List<SymbolEntry> SymbolTable = new ArrayList<>();
+    /** 符号表 */
+    List<SymbolEntry> symbolTable = new ArrayList<>();
 
-    public boolean checkGlo(String string)
-    {
-        //建立在无函数与变量重名的前提支下
-        for(SymbolEntry symbolEntry:SymbolTable)
-        {
-            if(symbolEntry.isGlobal){
-                if(string.equals(symbolEntry.name)){
-                    return false;
-                }
-            }
-            continue;
+    public SymbolEntry addSymbol(String name, SymbolType type,
+                          boolean isConstant, boolean isInitialized,
+                          int level,
+                          boolean isGlobal,boolean isParam,
+                          Pos curPos) throws AnalyzeError {
+        if(findSymbol(name) != null && findSymbol(name).level == level){
+            // 重定义
+            throw new AnalyzeError(ErrorCode.DuplicateDeclaration,curPos);
         }
-        return true;
+        SymbolEntry symbol =new SymbolEntry(
+                name,type,isConstant,isInitialized,level,isGlobal,isParam,0);
+        symbol.stackOffset = getOffset(symbol);
+        symbolTable.add(symbol);
+        return symbol;
+    }
+    public void addSymbol(SymbolEntry symbolEntry){
+        symbolTable.add(symbolEntry);
+    }
+    public void popAllLevel(int level){
+        for(int i=0;i<symbolTable.size();i++) {
+            SymbolEntry symbol = symbolTable.get(i);
+            if(symbol.level > level){
+                symbolTable.remove(i);
+                i--;
+            }
+        }
     }
 
-    public boolean checkLoc(String name,int level)
-    {
-        if(findCloestSymbol(name) == null)
-            return true;
-        if(findCloestSymbol(name).level == level)
-            return false;
-        return true;
+    public String toString(){
+        String res = "";
+        for(int i=0;i<symbolTable.size();i++) {
+            SymbolEntry symbol = symbolTable.get(i);
+            res += "name = " + symbol.name +
+                    "\ttype  = " + symbol.type +
+                    "\tisConst = "+symbol.isConstant +
+                    "\tisInit = " + symbol.isInitialized +
+                    "\tlevel = " + symbol.level +
+                    "\tisGlo = " + symbol.isGlobal +
+                    "\tisParam = " + symbol.isParam +
+                    "\toffset = " + symbol.stackOffset +
+                    "\n"
+            ;
+        }
+        return res;
     }
 
-    public void addSymbol(SymbolEntry symbolEntry)
-    {
-        SymbolTable.add(symbolEntry);
-    }
-
-    public SymbolEntry findCloestSymbol(String name)
-    {
-        for(int i = SymbolTable.size()-1;i >= 0; i--)
-        {
-            SymbolEntry symbol = SymbolTable.get(i);
+    // 找到这个名字的变量是啥
+    public SymbolEntry findSymbol(String name){
+        for(int i = symbolTable.size()-1;i>=0;i--){
+            SymbolEntry symbol = symbolTable.get(i);
             if(symbol.name.equals(name)){
                 return symbol;
             }
@@ -47,30 +68,28 @@ public class Symboler {
         return null;
     }
 
-    public int getStackOffset(SymbolEntry symbolEntry)
-    {
-        int offset = 0;
-        //函数的offset返回其在全局变量中的位置
-        for(int i=SymbolTable.size()-1;i>=0;i--){
-            SymbolEntry symbol = SymbolTable.get(i);
-            if(symbol.isGlobal == symbolEntry.isGlobal &&
-                    symbol.isParam == symbolEntry.isParam)
-                offset ++;
-        }
-        return offset;
-    }
-
-    public void popAbove(int level)
-    {
-        SymbolEntry tmp;
-        int size = SymbolTable.size();
-        for(int i=0;i<size;i++){
-            tmp = SymbolTable.get(i);
-            if(tmp.level >= level){
-                size--;
-                SymbolTable.remove(i--);
+    private int getOffset(SymbolEntry symbolEntry){
+        int res = 0;
+        // 如果是函数
+        if(symbolEntry.type == SymbolType.FUN_NAME){
+            for(int i=symbolTable.size()-1;i>=0;i--){
+                SymbolEntry symbol = symbolTable.get(i);
+                if(symbol.type == SymbolType.FUN_NAME)res++;
             }
+            return res;
         }
+        // 如果不是函数
+
+        for(int i=symbolTable.size()-1;i>=0;i--){
+            SymbolEntry symbol = symbolTable.get(i);
+            if(symbol.type != SymbolType.FUN_NAME &&
+            symbol.isGlobal == symbolEntry.isGlobal &&
+            symbol.isParam == symbolEntry.isParam)
+                res ++;
+        }
+        //System.out.println("get offset :"+symbolTable.size() +" "+ res);
+        //System.out.println(toString());
+        return res;
     }
 
 }

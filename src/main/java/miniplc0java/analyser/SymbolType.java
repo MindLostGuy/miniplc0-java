@@ -1,10 +1,11 @@
 package miniplc0java.analyser;
 
 public enum SymbolType {
-    INT,
-    VOID,
-    DOUBLE,
-    FUNC_NAME,
-    CHAR_GLO,
-    STRING_GLO
+    TYPE_NAME,
+    FUN_NAME,
+    INT_NAME,
+    DOUBLE_NAME,
+    VOID_NAME,
+    STRING_NAME,
+    CHAR_NAME
 }

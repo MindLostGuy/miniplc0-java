@@ -7,9 +7,9 @@ import miniplc0java.error.ExpectedTokenError;
 import miniplc0java.error.TokenizeError;
 import miniplc0java.instruction.Instruction;
 import miniplc0java.instruction.Operation;
-import miniplc0java.o0file.FunctionDef;
-import miniplc0java.o0file.GlobalDef;
-import miniplc0java.o0file.OZero;
+import miniplc0java.program.Functiondef;
+import miniplc0java.program.Globaldef;
+import miniplc0java.program.Program;
 import miniplc0java.tokenizer.Token;
 import miniplc0java.tokenizer.TokenType;
 import miniplc0java.tokenizer.Tokenizer;
@@ -17,17 +17,32 @@ import miniplc0java.util.Pos;
 
 import java.util.*;
 
-
 public final class Analyser {
+
     Tokenizer tokenizer;
     ArrayList<Instruction> instructions;
-    Symboler symboler = new Symboler();
-    FunctionDef curFunc;
-    public OZero file = new OZero();
-    Stack<SymbolType> TypeStack = new Stack<>();
 
     /** 当前偷看的 token */
     Token peekedToken = null;
+
+    /** 符号表 */
+    Symboler symboler = new Symboler();
+
+    /** 程序 */
+    public Program program = new Program();
+
+    /** 当前正在分析的函数 */
+    Functiondef nowFunc = null;
+
+    /** break 和 continue */
+    List<Integer> break_levels = new ArrayList<>();
+    List<Integer> break_poses = new ArrayList<>();
+    List<Integer> continue_levels = new ArrayList<>();
+    List<Integer> continue_poses = new ArrayList<>();
+    int while_level = 0;
+
+    /** 当前是int还是double */
+    Stack<ExperType> experTypeStack = new Stack<>();
 
     public Analyser(Tokenizer tokenizer) {
         this.tokenizer = tokenizer;
@@ -37,17 +52,16 @@ public final class Analyser {
     public List<Instruction> analyse() throws CompileError {
         analyseProgram();
         System.out.println("\n"+symboler);
-        System.out.println(file);
-        System.out.println(Arrays.toString(file.toBytes()));
+
+        System.out.println(program);
+//        System.out.println(program.toByteString());
+        System.out.println(Arrays.toString(program.toBytes()));
         return instructions;
     }
-
 
     /**
      * 查看下一个 Token
      *
-     * @return
-     * @throws TokenizeError
      */
     private Token peek() throws TokenizeError {
         if (peekedToken == null) {
@@ -59,8 +73,6 @@ public final class Analyser {
     /**
      * 获取下一个 Token
      *
-     * @return
-     * @throws TokenizeError
      */
     private Token next() throws TokenizeError {
         if (peekedToken != null) {
@@ -75,9 +87,6 @@ public final class Analyser {
     /**
      * 如果下一个 token 的类型是 tt，则返回 true
      *
-     * @param tt
-     * @return
-     * @throws TokenizeError
      */
     private boolean check(TokenType tt) throws TokenizeError {
         var token = peek();
@@ -87,9 +96,6 @@ public final class Analyser {
     /**
      * 如果下一个 token 的类型是 tt，则前进一个 token 并返回这个 token
      *
-     * @param tt 类型
-     * @return 如果匹配则返回这个 token，否则返回 null
-     * @throws TokenizeError
      */
     private Token nextIf(TokenType tt) throws TokenizeError {
         var token = peek();
@@ -103,9 +109,6 @@ public final class Analyser {
     /**
      * 如果下一个 token 的类型是 tt，则前进一个 token 并返回，否则抛出异常
      *
-     * @param tt 类型
-     * @return 这个 token
-     * @throws CompileError 如果类型不匹配
      */
     private Token expect(TokenType tt) throws CompileError {
         var token = peek();
@@ -117,78 +120,123 @@ public final class Analyser {
     }
 
     private void analyseProgram() throws CompileError {
-        // program -> item*
-        // item -> function | decl_stmt
-        symboler.addSymbol(new SymbolEntry("_start",SymbolType.FUNC_NAME,true,false,
-                true,false,0,0));
-        while(check(TokenType.FN_KW)||check(TokenType.LET_KW)||check(TokenType.CONST_KW)){
-            switch (peek().getTokenType()){
-                case FN_KW:
-                    analyseFunc();
-                    break;
-                default:
-                    analyseDecl_stmt(0);
-                    break;
+        // 先给_start占个坑
+        symboler.addSymbol("_start",SymbolType.FUN_NAME,
+                false,false,0,true,false,null);
+        while (!check(TokenType.EOF)){
+            if(check(TokenType.LET_KW)){
+                analyseDeclLetStmt(0);
+            }else if(check(TokenType.CONST_KW)){
+                analyseDeclConstStmt(0);
+            }else if(check(TokenType.FN_KW)){
+                anslyseFn();
+            }else{
+                break;
             }
         }
         addStartFun();
-        addGlo();
+        addGloName();
+        addFunName();
         expect(TokenType.EOF);
     }
 
-    private void addGlo() throws AnalyzeError {
-        for(SymbolEntry symbol:symboler.SymbolTable){
-            if(symbol.isGlobal && symbol.type != SymbolType.FUNC_NAME){
-                file.addGlo(new GlobalDef(symbol.isConstant,"00000000"));
-            }
-            else if(symbol.isGlobal){
-                file.addGlo(new GlobalDef(true,symbol.name));
+    private void addGloName(){
+        for(SymbolEntry symbol:symboler.symbolTable){
+            if(symbol.isGlobal && symbol.type != SymbolType.FUN_NAME){
+                program.addGlobal(new Globaldef(symbol.isConstant,"00000000"));
             }
         }
     }
 
-    private void addStartFun() throws AnalyzeError {
-        FunctionDef mainFunc = file.findFunc("main");
-        if(mainFunc == null)
-        {
-            throw new AnalyzeError(ErrorCode.NoMain,peekedToken.getStartPos());
+    private void addFunName(){
+        for(Functiondef fun:program.functiondefList){
+            fun.name_id = program.globaldefList.size();
+            program.addGlobal(new Globaldef(true,fun.name));
         }
-        AddIns(Operation.CALL,mainFunc.name);
-        FunctionDef functiondef = new FunctionDef();
-        functiondef.NAME = "_start";
-        functiondef.name = 0;
-        functiondef.ret = 0;
-        functiondef.locs = 0;
+    }
+
+    private void addMain()throws AnalyzeError{
+        Functiondef mainFun = program.find("main");
+        if(mainFun == null){
+            throw new AnalyzeError(ErrorCode.NoMain,null);
+        }
+        newIns(Operation.CALL,mainFun.id);
+    }
+    private void addStartFun() throws AnalyzeError {
+
+        addMain();
+        Functiondef functiondef = new Functiondef();
+        functiondef.name = "_start";
+        functiondef.id = 0;
+        functiondef.returnSize = 0;
+        functiondef.params = new ArrayList<>();
+        functiondef.localSize = 0;
         functiondef.instructions.addAll(instructions);
-        functiondef.body_size= instructions.size(); //(length+7)/8;
+        functiondef.bodySize = instructions.size(); //(length+7)/8;
         while(instructions.size() > 0){
             instructions.remove(0);
         }
-        file.functionDefList.add(0,functiondef);
+        program.functiondefList.add(0,functiondef);
     }
 
-    private void analyseFunc() throws CompileError {
-        // function -> 'fn' IDENT '(' function_param_list? ')' '->' ty block_stmt
-        expect(TokenType.FN_KW);
-        Token tmp = expect(TokenType.IDENT);
-        curFunc = new FunctionDef();
-        if(symboler.checkGlo(tmp.getValueString()))
-        {
-            SymbolEntry FuncSymbolEntry = new SymbolEntry(tmp.getValueString(),SymbolType.FUNC_NAME,false,
-                    false,true,false,0,0);
-            int offset = symboler.getStackOffset(FuncSymbolEntry);
-            FuncSymbolEntry.stackOffset = offset;
-            symboler.addSymbol(FuncSymbolEntry);
-            curFunc.name = offset;
-            curFunc.NAME = tmp.getValueString();
+    private void analyseDeclStmt(int level,boolean isConst) throws CompileError{
+        if(isConst)
+            expect(TokenType.CONST_KW);
+        else
+            expect(TokenType.LET_KW);
+        Token ident = expect(TokenType.IDENT);
+        String name = (String)ident.getValue();
+        expect(TokenType.COLON);
+        Token type = expect(TokenType.IDENT);
+        // 符号表相关
+        SymbolType symbolType = tokenToSymbolType(type);
+        if(symbolType == SymbolType.VOID_NAME){
+            throw new AnalyzeError(ErrorCode.TypeError,type.getStartPos());
         }
-        else throw new AnalyzeError(ErrorCode.DuplicateDeclaration,tmp.getStartPos());
+        symboler.addSymbol(name,tokenToSymbolType(type),isConst,false,level,
+                level==0,false,ident.getStartPos());
+        if(isConst && peek().getTokenType() != TokenType.ASSIGN){
+            throw new AnalyzeError(ErrorCode.InvalidInput,ident.getStartPos());
+        }
+        if(nextIf(TokenType.ASSIGN) != null){
+            pushVar(ident,false);
+            analyseExpr();
+            newIns(Operation.STORE64);
+
+            ExperType experType = experTypeStack.pop();
+            if(symbolType == SymbolType.INT_NAME && experType != ExperType.INT ||
+                    symbolType == SymbolType.DOUBLE_NAME && experType != ExperType.DOUBLE){
+                throw new AnalyzeError(ErrorCode.TypeError,ident.getStartPos());
+            }
+        }
+        if(level > 0)nowFunc.localSize++;
+        expect(TokenType.SEMICOLON);
+    }
+
+    private void analyseDeclLetStmt(int level) throws CompileError{
+        analyseDeclStmt(level,false);
+    }
+
+    private void analyseDeclConstStmt(int level) throws CompileError{
+        analyseDeclStmt(level,true);
+    }
+
+    private void anslyseFn() throws CompileError{
+        Pos startPos;
+        // fn关键字
+        startPos = expect(TokenType.FN_KW).getStartPos();
+
+        // 获取函数名字
+        Functiondef funEntry = new Functiondef();
+        nowFunc = funEntry;
+        nowFunc.localSize = 0;
+        funEntry.name = (String)expect(TokenType.IDENT).getValue();
         expect(TokenType.L_PAREN);
 
-        // function_param -> 'const'? IDENT ':' ty
-        // function_param_list -> function_param (',' function_param)*
+        int beforeParamSize = symboler.symbolTable.size();
+
+        // 获取函数参数列表
         while (!check(TokenType.R_PAREN)){
-            curFunc.params++;
             boolean isConst = false;
             if(nextIf(TokenType.CONST_KW) != null){
                 isConst = true;
@@ -197,202 +245,162 @@ public final class Analyser {
             String paramName = (String)param.getValue();
             expect(TokenType.COLON);
             Token paramType = expect(TokenType.IDENT);
-            SymbolType paramTy = ToTyTokenType(paramType);
-            SymbolEntry ParamSymbol = new SymbolEntry(paramName,paramTy,isConst,false,
-                    false,true,1,0);
-            int offset = symboler.getStackOffset(ParamSymbol);
-            ParamSymbol.stackOffset = offset;
-            symboler.addSymbol(ParamSymbol);
-            if(nextIf(TokenType.COMMA) == null){
+            SymbolEntry symbol = new SymbolEntry(paramName,tokenToSymbolType(paramType),
+                    isConst,true,1,false,true,funEntry.params.size());
+            funEntry.params.add(symbol);
+            symboler.addSymbol(symbol);
+            if(peek().getTokenType() != TokenType.COMMA){
                 break;
             }
-            curFunc.paramList.add(ParamSymbol);
+            expect(TokenType.COMMA);
         }
         expect(TokenType.R_PAREN);
         expect(TokenType.ARROW);
         Token returnType = expect(TokenType.IDENT);
-        SymbolType returnTy = ToTyTokenType(returnType);
-        curFunc.retType = returnTy;
-        switch (returnTy){
-            case INT:
-            case DOUBLE:
-                curFunc.ret = 1;
-                break;
-            case VOID:
-                curFunc.ret = 0;
-                break;
+        SymbolType symbolType = tokenToSymbolType(returnType);
+        switch (symbolType) {
+            case VOID_NAME -> {
+                funEntry.returnSize = 0;
+                funEntry.returnType = ExperType.VOID;
+            }
+            case DOUBLE_NAME -> {
+                funEntry.returnSize = 1;
+                funEntry.returnType = ExperType.DOUBLE;
+            }
+            case INT_NAME -> {
+                funEntry.returnSize = 1;
+                funEntry.returnType = ExperType.INT;
+            }
+            default -> throw new AnalyzeError(ErrorCode.UnknowError, returnType.getStartPos());
         }
 
-        //有返回值时，所有参数加偏移加1，保证在栈中返回值为arg0
-        if(curFunc.ret == 1){
-            for(SymbolEntry symbolEntry:symboler.SymbolTable){
-                if (symbolEntry.isParam)
-                    symbolEntry.stackOffset++;
+        // 如果函数有返回值，需要把所有参数+1
+
+        if(funEntry.returnSize == 1){
+            for(int i=beforeParamSize;i<symboler.symbolTable.size();i++){
+                symboler.symbolTable.get(i).stackOffset++;
             }
         }
 
-        int insSize = instructions.size();
+        // 获取函数的总长度
+        int oriSize = instructions.size();
 
-        analyseBlock_stmt(1);
+        // 解决递归问题，提前加入符号表和函数列表
 
-        //对可能的返回预留指令
+        SymbolEntry symbol = symboler.addSymbol(funEntry.name,SymbolType.FUN_NAME,
+                false,false,0,true,false,startPos);
 
-        //给Func填指令
-        for(int i=insSize;i<instructions.size();i++){
-            curFunc.instructions.add(instructions.get(i));
+        funEntry.id = symbol.stackOffset;
+        program.addFunc(funEntry);
+
+        funEntry.canReturn = false;
+
+        // 分析函数主体
+        analyseBlockStmt(0,true);
+
+        // 检查返回路径
+        if(!funEntry.canReturn){
+            if(funEntry.returnSize == 1){
+                throw new AnalyzeError(ErrorCode.ReturnError,startPos);
+            }else if(funEntry.returnSize == 0){
+                // 最后加上return
+                newIns(Operation.RET);
+            }
         }
-        curFunc.body_size = curFunc.instructions.size();
-        while(instructions.size() > insSize){
-            instructions.remove(insSize);
+
+        // 获取函数中新增的指令数量
+        for(int i=oriSize;i<instructions.size();i++){
+            funEntry.instructions.add(instructions.get(i));
+        }
+        funEntry.bodySize = instructions.size() - oriSize; //(length+7)/8;
+        while(instructions.size() > oriSize){
+            instructions.remove(oriSize);
         }
 
-        file.addFunc(curFunc);
-        //给函数后续的break等判断留位置
+        // 获取函数中需要的局部变量数量减掉自己占用的空间
+//        funEntry.localSize = symboler.symbolTable.size() - oriSymSize-1;
+
+        // 建立函数的符号表
+
+        //symboler.popAllLevel(0);
+        if(break_levels.size() > 0){
+            throw new AnalyzeError(ErrorCode.BreakError,startPos);
+        }
+        if(continue_levels.size() >0){
+            throw new AnalyzeError(ErrorCode.ContinueError,startPos);
+        }
     }
 
     /*
     stmt ->
-    expr_stmt
-    | decl_stmt
-    | if_stmt
-    | while_stmt
-    | break_stmt
-    | continue_stmt
-    | return_stmt
-    | block_stmt
-    | empty_stmt
-    */
-    private void analyseStmt(int level) throws CompileError{
-        Token peek = peek();
-        switch (peek.getTokenType())
-        {
-            case LET_KW:
-            case CONST_KW:
-                analyseDecl_stmt(level);
-                break;
-            case IF_KW:
-                analyseIf_stmt(level);
-                break;
-            case WHILE_KW:
-                analyseWhile_stmt(level);
-                break;
-            case BREAK_KW:
-                analyseBreak_stmt();
-                break;
-            case CONTINUE_KW:
-                analyseContinue_stmt();
-                break;
-            case RETURN_KW:
-                analyseReturn_stmt(level);
-                break;
-            case L_BRACE:
-                analyseBlock_stmt(level+1);
-                break;
-            case SEMICOLON:
-                expect(TokenType.SEMICOLON);
-                break;
-            default:
-                analyseExpr_stmt(level);
-        }
-    }
+      expr_stmt
+    | decl_stmt let const
+    | if_stmt if
+    | while_stmt while
+    | break_stmt break
+    | continue_stmt continue
+    | return_stmt return
+    | block_stmt {
+    | empty_stmt ;
 
-    private void analyseDecl_stmt(int level) throws CompileError {
-        // decl_stmt -> let_decl_stmt | const_decl_stmt
-        if (peek().getTokenType() == TokenType.LET_KW) {
-            analyseLet_decl_stmt(level);
-        }
-        else if(peek().getTokenType() == TokenType.CONST_KW) {
-            analyseConst_decl_stmt(level);
-        }
-    }
+     */
+    private void analyseBlockStmt(int level,boolean canExec) throws CompileError{
+        level ++;
+        expect(TokenType.L_BRACE);
+        while(true){
+            Token peek = peek();
+            TokenType type = peek.getTokenType();
+            if (type == TokenType.CONST_KW) {
+                analyseDeclConstStmt(level);
+            } else if (type == TokenType.LET_KW) {
+                analyseDeclLetStmt(level);
+            } else if (type == TokenType.IF_KW) {
+                analyseIfStmt(level,canExec);
+            } else if(type == TokenType.WHILE_KW){
+                analyseWhile(level);
+            } else if(type == TokenType.RETURN_KW){
+                analyseReturn();
+                if(canExec){
+                    nowFunc.canReturn = true;
+                }
+            } else if(type == TokenType.L_BRACE){
+                analyseBlockStmt(level,canExec);
+            } else if(type == TokenType.SEMICOLON){
 
-    private void analyseLet_decl_stmt(int level) throws CompileError {
-        //let_decl_stmt -> 'let' IDENT ':' ty ('=' expr)? ';'
-        expect(TokenType.LET_KW);
-        Token token = expect(TokenType.IDENT);
-        String name = (String)token.getValue();
-        expect(TokenType.COLON);
-        Token type = expect(TokenType.IDENT);
-        SymbolType ty = ToTyTokenType(type);
-        if(ty == SymbolType.VOID)
-            throw new AnalyzeError(ErrorCode.InvalidType,type.getStartPos());
-        boolean isGlo = false;
-        if(level == 0){
-            isGlo = true;
-        }
-        SymbolEntry symbolEntry = new SymbolEntry(name,ty,false,false,
-                isGlo,false,level,0);
-        int offset = symboler.getStackOffset(symbolEntry);
-        symbolEntry.stackOffset = offset;
-        symboler.addSymbol(symbolEntry);
-        if(nextIf(TokenType.ASSIGN) != null){
-            symbolEntry.isInitialized = true;
-            pushVAR(token,false);
-            analyseExpr();
-            AddIns(Operation.STORE64);
-            if(TypeStack.pop() != ty)
-            {
-                throw new AnalyzeError(ErrorCode.InvalidTypeComparion,peekedToken.getStartPos());
+                next();
+            } else if(type == TokenType.R_BRACE) {
+                break;
+            } else if(type == TokenType.BREAK_KW) {
+                analyseBreak();
+            } else if(type == TokenType.CONTINUE_KW) {
+                analyseContinue();
+            }else{
+                analyseExpr();
             }
         }
-        if(level > 0)
-        {
-            curFunc.locs = Math.max(curFunc.locs, offset);
-        }
-        expect(TokenType.SEMICOLON);
+        expect(TokenType.R_BRACE);
+
+        // 作用域清空
+        symboler.popAllLevel(level-1);
+
     }
 
-    private void analyseConst_decl_stmt(int level) throws CompileError {
-        //const_decl_stmt -> 'const' IDENT ':' ty '=' expr ';'
-        expect(TokenType.CONST_KW);
-        Token token = expect(TokenType.IDENT);
-        String name = (String)token.getValue();
-        expect(TokenType.COLON);
-        Token type = expect(TokenType.IDENT);
-        SymbolType ty = ToTyTokenType(type);
-        if(ty == SymbolType.VOID)
-            throw new AnalyzeError(ErrorCode.InvalidType,type.getStartPos());
-        boolean isGlo = false;
-        if(level == 0){
-            isGlo = true;
-        }
-        SymbolEntry symbolEntry = new SymbolEntry(name,ty,true,false,
-                isGlo,false,level,0);
-        int offset = symboler.getStackOffset(symbolEntry);
-        symbolEntry.stackOffset = offset;
-        symboler.addSymbol(symbolEntry);
-        expect(TokenType.ASSIGN);
-        symbolEntry.isInitialized = true;
-        pushVAR(token,false);
-        analyseExpr();
-        AddIns(Operation.STORE64);
-        if(TypeStack.pop() != ty)
-        {
-            throw new AnalyzeError(ErrorCode.InvalidTypeComparion,peekedToken.getStartPos());
-        }
-        if(level > 0)
-        {
-            curFunc.locs = Math.max(curFunc.locs, offset);
-        }
-        expect(TokenType.SEMICOLON);
-    }
 
-    // if_stmt -> 'if' expr block_stmt ('else' 'if' expr block_stmt)* ('else' block_stmt)?
-    private void analyseIf_stmt(int level) throws CompileError {
+    private void analyseIfStmt(int level,boolean canExec) throws CompileError{
         expect(TokenType.IF_KW);
         analyseExpr();
         int br_false_pos,br_pos;
         br_false_pos = instructions.size();
-        AddIns(Operation.BR_FALSE);
-        analyseBlock_stmt(level+1);
+        newIns(Operation.BR_FALSE);
+        analyseBlockStmt(level,false);// if后面的肯定不能保证执行
         br_pos = instructions.size();
         if(nextIf(TokenType.ELSE_KW) != null){
-            AddIns(Operation.BR);
+            newIns(Operation.BR);
             instructions.get(br_false_pos).setX(br_pos - br_false_pos);
-            if(check(TokenType.IF_KW)){
-                analyseIf_stmt(level);
+            if(check(TokenType.IF_KW)){ // else if
+                analyseIfStmt(level,canExec); // else if 后面也不一定执行
             }else{
-                analyseBlock_stmt(level+1);
+                analyseBlockStmt(level,canExec); // else
             }
             instructions.get(br_pos).setX(instructions.size() - br_pos-1);
         }else{
@@ -400,402 +408,85 @@ public final class Analyser {
         }
     }
 
-    // block_stmt -> '{' stmt* '}'
-    private void analyseBlock_stmt(int level) throws CompileError {
-        expect(TokenType.L_BRACE);
-        while(peek().getTokenType() != TokenType.R_BRACE)
-        {
-            analyseStmt(level);
-        }
-        expect(TokenType.R_BRACE);
-        symboler.popAbove(level);
-    }
-
-    // expr_stmt -> expr ';'
-    private void analyseExpr_stmt(int level) throws CompileError{
-        analyseExpr();
-        expect(TokenType.SEMICOLON);
-    }
-
-    // while_stmt -> 'while' expr block_stmt
-    private void analyseWhile_stmt(int level) throws CompileError{
+    private void analyseWhile(int level) throws CompileError{
+        while_level++;
         expect(TokenType.WHILE_KW);
         int start = instructions.size();
         analyseExpr();
         int br_pos = instructions.size();
-        AddIns(Operation.BR_FALSE);
-        analyseBlock_stmt(level+1);
-        AddIns(Operation.BR,(start - instructions.size() - 1));
+        newIns(Operation.BR_FALSE);
+        analyseBlockStmt(level,false);
+        newIns(Operation.BR,(start - instructions.size() - 1));
+
         instructions.get(br_pos).setX(instructions.size() - br_pos-1);
-    }
-
-    // return_stmt -> 'return' expr? ';'
-    private void analyseReturn_stmt(int level) throws CompileError{
-        expect(TokenType.RETURN_KW);
-        switch (curFunc.retType){
-            case VOID:
-                break;
-            case INT:
-            case DOUBLE:
-                if(peek().getValue() == TokenType.SEMICOLON){
-                    throw new AnalyzeError(ErrorCode.ErrorReturn,peekedToken.getStartPos());
-                }
-                AddIns(Operation.ARGA,0);
-                analyseExpr();
-                AddIns(Operation.STORE64);
-                if(TypeStack.pop() != curFunc.retType)
-                {
-                    throw new AnalyzeError(ErrorCode.InvalidTypeComparion,peekedToken.getStartPos());
-                }
-
+        System.out.println("while");
+        //break
+        for(int i=0;i<break_levels.size();i++){
+            System.out.println(break_levels.get(i)+" "+break_poses.get(i));
+            if(break_levels.get(i) == while_level){
+                instructions.get(break_poses.get(i)).setX(instructions.size()-break_poses.get(i)-1);
+                break_levels.remove(i);
+                break_poses.remove(i);
+                i--;
+            }
         }
-        AddIns(Operation.RET);
-        expect(TokenType.SEMICOLON);
+
+        //continue
+        for(int i=0;i<continue_levels.size();i++){
+            if(continue_levels.get(i) == while_level){
+                System.out.println("continue "+level +" "+ continue_levels.get(i) );
+                instructions.get(continue_poses.get(i)).setX((start - continue_poses.get(i) - 1));
+                continue_levels.remove(i);
+                continue_poses.remove(i);
+                i--;
+            }
+        }
+        while_level--;
     }
 
-    // break_stmt -> 'break' ';'
-    private void analyseBreak_stmt() throws CompileError{
+    private void analyseBreak()throws CompileError{
         expect(TokenType.BREAK_KW);
-        expect(TokenType.SEMICOLON);
+        break_levels.add(while_level);
+        break_poses.add(instructions.size());
+        newIns(Operation.BR,0);
     }
-
-    // continue_stmt -> 'continue' ';'
-    private void analyseContinue_stmt() throws CompileError{
+    private void analyseContinue()throws CompileError{
         expect(TokenType.CONTINUE_KW);
-        expect(TokenType.SEMICOLON);
+        continue_levels.add(while_level);
+        continue_poses.add(instructions.size());
+        newIns(Operation.BR,0);
     }
-
-    /*
-    expr ->
-    operator_expr
-    | negate_expr
-    | assign_expr
-    | as_expr
-    | call_expr
-    | literal_expr
-    | ident_expr
-    | group_expr
-     */
-
-    private void analyseExpr() throws CompileError
-    {
-        if(!isExprBegin()){
-            throw new AnalyzeError(ErrorCode.InvalidInput,peek().getStartPos());
-        }
-        analyseExpr_CMP();
-    }
-
-    private void analyseExpr_CMP() throws CompileError
-    {
-        analyseExpr_PluMin();
-        while(isCmpOp()){
-            TokenType curType = next().getTokenType();
-            analyseExpr_PluMin();
-            AddCmpIns();
-            switch (curType){
-                case EQ:
-                    AddIns(Operation.NOT);
-                    break;
-                case NEQ:
-                    AddIns(Operation.NOT);
-                    AddIns(Operation.NOT);
-                    break;
-                case LE:
-                    AddIns(Operation.SET_GT);
-                    AddIns(Operation.NOT);
-                    break;
-                case LT:
-                    AddIns(Operation.SET_LT);
-                    break;
-                case GE:
-                    AddIns(Operation.SET_LT);
-                    AddIns(Operation.NOT);
-                    break;
-                case GT:
-                    AddIns(Operation.SET_GT);
-                    break;
+    private void analyseReturn() throws CompileError{
+        expect(TokenType.RETURN_KW);
+        if(nowFunc.returnType == ExperType.VOID){
+            expect(TokenType.SEMICOLON);
+        }else {
+            if(peek().getValue() == TokenType.SEMICOLON){
+                throw new AnalyzeError(ErrorCode.ReturnError,peek().getStartPos());
             }
-        }
-    }
-
-    private void analyseExpr_PluMin() throws CompileError
-    {
-        analyseExpr_MulDiv();
-        while (isPorM())
-        {
-            TokenType curType = next().getTokenType();
-            analyseExpr_MulDiv();
-            SymbolType lType = TypeStack.pop();
-            SymbolType rType = TypeStack.pop();
-            if(lType != rType){
-                throw new AnalyzeError(ErrorCode.InvalidTypeComparion,peek().getStartPos());
-            }
-            TypeStack.push(lType);
-            if(curType == TokenType.PLUS){
-                AddIns(Operation.ADD_I);
-            }
-            else{
-                AddIns(Operation.SUB_I);
-            }
-        }
-
-    }
-
-    private void analyseExpr_MulDiv() throws CompileError
-    {
-        analyseExpr_As();
-        while (isMorD())
-        {
-            TokenType curType = next().getTokenType();
-            analyseExpr_As();
-            SymbolType lType = TypeStack.pop();
-            SymbolType rType = TypeStack.pop();
-            if(lType != rType){
-                throw new AnalyzeError(ErrorCode.InvalidTypeComparion,peek().getStartPos());
-            }
-            TypeStack.push(lType);
-            if(curType == TokenType.MUL){
-                AddIns(Operation.MUL_I);
-            }
-            else{
-                AddIns(Operation.DIV_I);
-            }
-        }
-
-    }
-
-    private void analyseExpr_As() throws CompileError
-    {
-        analyseExpr_Neg();
-    }
-
-    private void analyseExpr_Neg() throws CompileError
-    {
-        int NegTimes = 0;
-        while(peek().getTokenType() == TokenType.MINUS)
-        {
-            NegTimes++;
-            next();
-        }
-        if(NegTimes % 2 != 0){
-            AddIns(Operation.PUSH,0);
-        }
-        analyseExpr_Item();
-        if(NegTimes % 2 != 0){
-            AddIns(Operation.SUB_I);
-        }
-    }
-
-    private void analyseExpr_Item() throws CompileError
-    {
-        if(nextIf(TokenType.L_PAREN) != null)
-        {
+            newIns(Operation.ARGA,0);
             analyseExpr();
-            expect(TokenType.R_PAREN);
-        }
-        Token cur = peek();
-        switch(cur.getTokenType()){
-            case UINT_LITERAL:
-                pushUINT(cur);
-                break;
-            case DOUBLE_LITERAL:
-                pushDOUBLE(cur);
-                break;
-            case STRING_LITERAL:
-                pushSTRING(cur);
-                break;
-            case IDENT:
-                pushIDENT(cur);
-                break;
-            default:
-                throw new AnalyzeError(ErrorCode.InvalidType,cur.getStartPos());
+            newIns(Operation.STORE64);
+
+            if(nowFunc.returnType == ExperType.INT && experTypeStack.peek() != ExperType.INT ||
+                    nowFunc.returnType == ExperType.DOUBLE && experTypeStack.peek() != ExperType.DOUBLE ){
+                throw new AnalyzeError(ErrorCode.ReturnError,peek().getStartPos());
+            }
         }
 
+        newIns(Operation.RET);
     }
 
-    private void pushUINT(Token token) throws CompileError {
-        expect(TokenType.UINT_LITERAL);
-        AddIns(Operation.PUSH,(int)token.getValue());
-        TypeStack.push(SymbolType.INT);
+    private void analyseExpr() throws CompileError{
+        if(!isExprBegin(peek().getTokenType())){
+            throw new AnalyzeError(ErrorCode.InvalidInput,peekedToken.getStartPos());
+        }
+        analyseExprCmp();
+
+        check(TokenType.SEMICOLON);
     }
 
-    private void pushDOUBLE(Token token) throws CompileError {
-        expect(TokenType.DOUBLE_LITERAL);
-        AddIns(Operation.PUSH,Double.doubleToRawLongBits((double)token.getValue()));
-        TypeStack.push(SymbolType.DOUBLE);
-    }
-
-    private void pushSTRING(Token token) throws CompileError {
-        expect(TokenType.STRING_LITERAL);
-        String value = (String)token.getValue();
-        for(int i=value.length()-1;i>=0;i--){
-            AddIns(Operation.PUSH, (int) value.charAt(i));
-        }
-    }
-
-    private void pushIDENT(Token token) throws CompileError {
-        expect(TokenType.IDENT);
-        String name = (String) token.getValue();
-        SymbolEntry symbol = symboler.findCloestSymbol(name);
-        if(symbol == null){
-            if(isStandard(name)){
-                handleStandard(name);
-                return;
-            }
-            else {
-                throw new AnalyzeError(ErrorCode.NotDeclared, token.getStartPos());
-            }
-        }
-        if(symbol.type == SymbolType.FUNC_NAME){
-            pushFUNC(token);
-        }
-        else{
-            if(nextIf(TokenType.ASSIGN) != null) {
-                if(symbol.isConstant){
-                    throw new AnalyzeError(ErrorCode.AssignToConstant,token.getStartPos());
-                }
-                pushVAR(token,false);
-                analyseExpr();
-                AddIns(Operation.STORE64);
-            }else {
-                pushVAR(token,true);
-            }
-        }
-    }
-
-    private void pushVAR(Token token,boolean reLoad) throws CompileError {
-        SymbolEntry symbol = symboler.findCloestSymbol((String) token.getValue());
-        if(symbol == null){
-            throw new AnalyzeError(ErrorCode.NotDeclared,token.getStartPos());
-        }
-        if (symbol.isGlobal) {
-            AddIns(Operation.GLOBA, symbol.stackOffset);
-        } else if (symbol.isParam) {
-            AddIns(Operation.ARGA, symbol.stackOffset);
-        } else {
-            AddIns(Operation.LOCA, symbol.stackOffset);
-        }
-        if(reLoad){
-            AddIns(Operation.LOAD64);
-            if(symbol.type == SymbolType.INT){
-                TypeStack.push(SymbolType.INT);
-            }
-            else if(symbol.type == SymbolType.DOUBLE){
-                TypeStack.push(SymbolType.DOUBLE);
-            }
-        }
-    }
-
-    private void pushFUNC(Token token) throws CompileError
-    {
-        String name = token.getValueString();
-        FunctionDef aimFunc = file.findFunc(name);
-        if(aimFunc == null){
-            throw new AnalyzeError(ErrorCode.NotDeclared,token.getStartPos());
-        }
-
-        //返回空间
-        for(int i=0;i<aimFunc.ret;i++){
-            AddIns(Operation.PUSH,0);
-        }
-
-        expect(TokenType.L_PAREN);
-        for(int i=0;i<aimFunc.params-1;i++){
-            analyseExpr();
-            expect(TokenType.COMMA);
-            //录入值与参数不匹配
-            if(!TypeStack.peek().equals(aimFunc.paramList.get(i).type))
-            {
-                throw new AnalyzeError(ErrorCode.InvalidParam,peekedToken.getStartPos());
-            }
-        }
-        analyseExpr();
-        //录入值与参数不匹配
-        if(!TypeStack.peek().equals(aimFunc.paramList.get(aimFunc.params-1).type))
-        {
-            throw new AnalyzeError(ErrorCode.InvalidParam,peekedToken.getStartPos());
-        }
-        expect(TokenType.R_PAREN);
-        AddIns(Operation.CALL,aimFunc.name);
-
-        if(aimFunc.retType == SymbolType.INT){
-            TypeStack.push(SymbolType.INT);
-        }
-        else if(aimFunc.retType == SymbolType.DOUBLE){
-            TypeStack.push(SymbolType.DOUBLE);
-        }
-
-    }
-
-    private boolean isStandard(String name)
-    {
-        String Stds[] = {"getint","getdouble","getchar",
-                "putint","putdouble","putchar","putstr","putln"};
-        for(String stds:Stds){
-            if(stds.equals(name))
-                return true;
-        }
-        return false;
-    }
-
-    private void handleStandard(String name) throws CompileError {
-        switch(name){
-            case "getint" : {
-                expect(TokenType.L_PAREN);
-                expect(TokenType.R_PAREN);
-                AddIns(Operation.SCAN_I);
-            }
-            case "getdouble" : {
-                expect(TokenType.L_PAREN);
-                expect(TokenType.R_PAREN);
-                AddIns(Operation.SCAN_F);
-            }
-            case "getchar" : {
-                expect(TokenType.L_PAREN);
-                expect(TokenType.R_PAREN);
-                AddIns(Operation.SCAN_C);
-            }
-            case "putint" : {
-                expect(TokenType.L_PAREN);
-                analyseExpr();
-                expect(TokenType.R_PAREN);
-                AddIns(Operation.PRINT_I);
-            }
-            case "putdouble" : {
-                expect(TokenType.L_PAREN);
-                analyseExpr();
-                expect(TokenType.R_PAREN);
-                AddIns(Operation.PRINT_F);
-            }
-            case "putstr" : {
-                expect(TokenType.L_PAREN);
-                if (peek().getTokenType() != TokenType.STRING_LITERAL) {
-                    throw new AnalyzeError(ErrorCode.InvalidInput, peekedToken.getStartPos());
-                }
-                String str = (String) peek().getValue();
-                analyseExpr_Item();
-                for (int i = 0; i < str.length(); i++) {
-                    AddIns(Operation.PRINT_C);
-                }
-                expect(TokenType.R_PAREN);
-            }
-            case "putchar" : {
-                expect(TokenType.L_PAREN);
-                analyseExpr();
-                AddIns(Operation.PRINT_C);
-                expect(TokenType.R_PAREN);
-            }
-            case "putln" : {
-                expect(TokenType.L_PAREN);
-                AddIns(Operation.PUSH, (int) '\n');
-                AddIns(Operation.PRINT_C);
-                expect(TokenType.R_PAREN);
-            }
-        }
-    }
-
-    private boolean isExprBegin() throws CompileError{
-        TokenType type = peek().getTokenType();
+    private boolean isExprBegin(TokenType type){
         return type == TokenType.IDENT ||
                 type == TokenType.L_PAREN ||
                 type == TokenType.MINUS||
@@ -805,63 +496,378 @@ public final class Analyser {
                 type == TokenType.STRING_LITERAL;
     }
 
-    private boolean isCmpOp() throws CompileError{
-        TokenType type = peek().getTokenType();
-        return type == TokenType.EQ ||
-                type == TokenType.NEQ ||
-                type == TokenType.GE ||
-                type == TokenType.GT ||
-                type == TokenType.LE ||
-                type == TokenType.LT ;
+
+    private void analyseExprCmp() throws CompileError{
+        analyseExprPM();
+        while (isCmpOp(peek().getTokenType())){
+            TokenType type = peek().getTokenType();
+            next();
+            analyseExprPM();
+            switch (type) {
+                case GT -> {
+                    newInsCmpIF();
+                    newIns(Operation.SET_GT);
+                }
+                case LT -> {
+                    newInsCmpIF();
+                    newIns(Operation.SET_LT);
+                }
+                case GE -> {
+                    newInsCmpIF();
+                    newIns(Operation.SET_LT);
+                    newIns(Operation.NOT);
+                }
+                case LE -> {
+                    newInsCmpIF();
+                    newIns(Operation.SET_GT);
+                    newIns(Operation.NOT);
+                }
+                case EQ -> {
+                    newInsCmpIF();
+                    newIns(Operation.NOT);
+                }
+                case NEQ -> {
+                    newInsCmpIF();
+                    newIns(Operation.NOT);
+                    newIns(Operation.NOT);
+                }
+            }
+        }
     }
 
-    private boolean isPorM() throws CompileError{
-        TokenType type = peek().getTokenType();
-        return type == TokenType.PLUS ||
-                type == TokenType.MINUS ;
+    private ExperType getNowExperType() throws TokenizeError, AnalyzeError {
+        ExperType first = experTypeStack.pop();
+        ExperType second = experTypeStack.pop();
+        if(first != second){
+            throw new AnalyzeError(ErrorCode.TypeError,peek().getStartPos());
+        }
+        return first;
     }
 
-    private boolean isMorD() throws CompileError{
-        TokenType type = peek().getTokenType();
-        return type == TokenType.MUL ||
-                type == TokenType.DIV ;
+    private void newInsCmpIF() throws TokenizeError, AnalyzeError {
+        ExperType nowType = getNowExperType();
+        if(nowType == ExperType.INT)
+            newIns(Operation.CMP_I);
+        else
+            newIns(Operation.CMP_F);
     }
 
+    private void analyseExprPM() throws CompileError{
+        analyseExprMD();
+        TokenType type = peek().getTokenType();
+        while (type == TokenType.PLUS || type == TokenType.MINUS){
+            Token op = next();
+            analyseExprMD();
 
+            ExperType nowExperType = getNowExperType();
 
-    private SymbolType ToTyTokenType(Token token) throws CompileError
-    {
+            if(nowExperType == ExperType.INT){
+                experTypeStack.push(ExperType.INT);
+            }else{
+                experTypeStack.push(ExperType.DOUBLE);
+            }
+
+            if(op.getTokenType() == TokenType.PLUS) {
+                if(nowExperType == ExperType.INT)
+                    newIns(Operation.ADD_I);
+                else
+                    newIns(Operation.ADD_F);
+            }else{
+                if(nowExperType == ExperType.INT)
+                    newIns(Operation.SUB_I);
+                else
+                    newIns(Operation.SUB_F);
+            }
+
+            type = peek().getTokenType();
+        }
+    }
+
+    private void analyseExprMD() throws CompileError{
+        analyseExprAS();
+        TokenType type = peek().getTokenType();
+        while (type == TokenType.MUL || type == TokenType.DIV){
+            next();
+            analyseExprAS();
+
+            ExperType nowExperType = getNowExperType();
+
+            if(nowExperType == ExperType.INT){
+                experTypeStack.push(ExperType.INT);
+            }else{
+                experTypeStack.push(ExperType.DOUBLE);
+            }
+
+            if(type == TokenType.MUL){
+                if(nowExperType == ExperType.INT)
+                    newIns(Operation.MUL_I);
+                else
+                    newIns(Operation.MUL_F);
+            }else{
+                if(nowExperType == ExperType.INT)
+                    newIns(Operation.DIV_I);
+                else
+                    newIns(Operation.DIV_F);
+            }
+            type = peek().getTokenType();
+        }
+    }
+
+    private void analyseExprAS() throws CompileError{
+        analyseExprSign();
+        while (nextIf(TokenType.AS_KW) != null){
+            String type = next().getValueString();
+            if(type.equals("int")){
+                if(experTypeStack.peek() == ExperType.DOUBLE){ // double to int
+                    newIns(Operation.FTOI);
+                    experTypeStack.pop();
+                    experTypeStack.push(ExperType.INT);
+                }
+                // int to int忽略
+            }
+            if(type.equals("double")){
+                if(experTypeStack.peek() == ExperType.INT){ // int to double
+                    newIns(Operation.ITOF);
+                    experTypeStack.pop();
+                    experTypeStack.push(ExperType.DOUBLE);
+                }
+            }
+            analyseExprSign();
+        }
+    }
+
+    private void analyseExprSign() throws CompileError{
+        TokenType type = peek().getTokenType();
+        int minusCnt = 0;
+        while(type == TokenType.MINUS){
+            next();
+            minusCnt++;
+            newIns(Operation.PUSH,0);
+            type = peek().getTokenType();
+        }
+        analyseExprItem();
+        while ((minusCnt--) !=0){
+            if(experTypeStack.peek() == ExperType.INT)
+                newIns(Operation.SUB_I);
+            else
+                newIns(Operation.SUB_F);
+        }
+    }
+
+    private void analyseExprItem() throws CompileError{
+        if(nextIf(TokenType.L_PAREN) != null){
+            analyseExpr();
+            expect(TokenType.R_PAREN);
+        }
+        Token token = peek();
+        if(token.getTokenType() == TokenType.UINT_LITERAL){
+            pushUint(token);
+        }else if(token.getTokenType() == TokenType.DOUBLE_LITERAL){
+            pushDouble(token);
+        }else if(token.getTokenType() == TokenType.IDENT){
+            pushIdent(token);
+        }else if(token.getTokenType() == TokenType.STRING_LITERAL){
+            pushString(token);
+        }
+    }
+
+    private void pushString(Token token) throws CompileError {
+        expect(TokenType.STRING_LITERAL);
+        String value = (String)token.getValue();
+        for(int i=value.length()-1;i>=0;i--){
+            newIns(Operation.PUSH, (int) value.charAt(i));
+        }
+    }
+    private void pushUint(Token token) throws CompileError {
+        expect(TokenType.UINT_LITERAL);
+        newIns(Long.parseLong((String)token.getValue()));
+        experTypeStack.push(ExperType.INT);
+    }
+    private void pushDouble(Token token) throws CompileError {
+        expect(TokenType.DOUBLE_LITERAL);
+        double dou = Double.parseDouble((String)token.getValue());
+        newIns(Double.doubleToRawLongBits(dou));
+        experTypeStack.push(ExperType.DOUBLE);
+    }
+    private void pushFun(Token token) throws CompileError{
+        String name = (String)token.getValue();
+        Functiondef function = program.find(name);
+        if(function == null){
+            System.out.println("Err");
+            if(isStd(name)){
+                pushStd(name);
+            }
+            throw new AnalyzeError(ErrorCode.NotDeclared,token.getStartPos());
+        }
+
+        // 申请返回空间
+        for(int i=0;i<function.returnSize;i++){
+            newIns(Operation.PUSH,0);
+        }
+
+        expect(TokenType.IDENT);
+        // 传递参数
+        expect(TokenType.L_PAREN);
+        for(int i=0;i<function.params.size();i++){
+            if(i != 0){
+                expect(TokenType.COMMA);
+            }
+            analyseExpr();
+        }
+        // call
+        newIns(Operation.CALL,function.id);
+
+        if(function.returnType == ExperType.INT){
+            experTypeStack.push(ExperType.INT);
+        }else if(function.returnType == ExperType.DOUBLE){
+            experTypeStack.push(ExperType.DOUBLE);
+        }
+
+        expect(TokenType.R_PAREN);
+    }
+    private void pushIdent(Token token) throws CompileError {
+        String name = (String) token.getValue();
+        SymbolEntry symbol = symboler.findSymbol(name);
+        if(symbol == null){
+            if(isStd(name)){
+                pushStd(name);
+                return;
+            }else {
+                throw new AnalyzeError(ErrorCode.NotDeclared, token.getStartPos());
+            }
+        }
+        if(symbol.type == SymbolType.FUN_NAME){
+            pushFun(token);
+        }else{
+            expect(TokenType.IDENT);
+            if(nextIf(TokenType.ASSIGN) != null) {
+                if(symbol.isConstant){
+                    throw new AnalyzeError(ErrorCode.AssignToConstant,token.getStartPos());
+                }
+                pushVar(token,false);
+                analyseExpr();
+                newIns(Operation.STORE64);
+            }else {
+                pushVar(token,true);
+            }
+        }
+    }
+
+    // 变量，不是函数的变量
+    private void pushVar(Token token,boolean needToLoad) throws CompileError {
+        SymbolEntry symbol = symboler.findSymbol((String) token.getValue());
+        if(symbol == null){
+            throw new AnalyzeError(ErrorCode.NoError,token.getStartPos());
+        }
+        if (symbol.isGlobal) {
+            newIns(Operation.GLOBA, symbol.stackOffset);
+        } else if (symbol.isParam) {
+            newIns(Operation.ARGA, symbol.stackOffset);
+        } else {
+            newIns(Operation.LOCA, symbol.stackOffset);
+        }
+        if(needToLoad){
+            newIns(Operation.LOAD64);
+            if(symbol.type == SymbolType.INT_NAME){
+                experTypeStack.push(ExperType.INT);
+            }else{
+                experTypeStack.push(ExperType.DOUBLE);
+            }
+        }
+    }
+
+    private boolean isCmpOp(TokenType type){
+        return type == TokenType.LE || type == TokenType.GE ||
+                type == TokenType.GT || type == TokenType.LT ||
+                type == TokenType.EQ || type == TokenType.NEQ;
+    }
+
+    private SymbolType tokenToSymbolType(Token token) throws CompileError{
         String tokenName = (String)token.getValue();
         switch (tokenName) {
             case "int":
-                return SymbolType.INT;
+                return SymbolType.INT_NAME;
             case "double":
-                return SymbolType.DOUBLE;
+                return SymbolType.DOUBLE_NAME;
             case "void":
-                return SymbolType.VOID;
-            default:
-                throw new AnalyzeError(ErrorCode.InvalidType,token.getStartPos());
+                return SymbolType.VOID_NAME;
+        }
+        throw new AnalyzeError(ErrorCode.InvalidInput,token.getStartPos());
+    }
+
+    private boolean isStd(String name){
+        String[] stds = new String[]{"getint","getdouble","getchar",
+                "putint","putdouble","putchar","putstr","putln"};
+        for(String std:stds){
+            if(name.equals(std))
+                return true;
+        }
+        return false;
+    }
+    private void pushStd(String name) throws CompileError {
+        expect(TokenType.IDENT);
+        switch (name) {
+            case "getint" -> {
+                expect(TokenType.L_PAREN);
+                expect(TokenType.R_PAREN);
+                newIns(Operation.SCAN_I);
+            }
+            case "getdouble" -> {
+                expect(TokenType.L_PAREN);
+                expect(TokenType.R_PAREN);
+                newIns(Operation.SCAN_F);
+            }
+            case "getchar" -> {
+                expect(TokenType.L_PAREN);
+                newIns(Operation.SCAN_C);
+                expect(TokenType.R_PAREN);
+            }
+            case "putint" -> {
+                expect(TokenType.L_PAREN);
+                analyseExpr();
+                expect(TokenType.R_PAREN);
+                newIns(Operation.PRINT_I);
+            }
+            case "putdouble" -> {
+                expect(TokenType.L_PAREN);
+                analyseExpr();
+                expect(TokenType.R_PAREN);
+                newIns(Operation.PRINT_F);
+            }
+            case "putstr" -> {
+                expect(TokenType.L_PAREN);
+                if (peek().getTokenType() != TokenType.STRING_LITERAL) {
+                    throw new AnalyzeError(ErrorCode.InvalidInput, peekedToken.getStartPos());
+                }
+                String str = (String) peek().getValue();
+                analyseExprItem();
+                for (int i = 0; i < str.length(); i++) {
+                    newIns(Operation.PRINT_C);
+                }
+                expect(TokenType.R_PAREN);
+            }
+            case "putchar" -> {
+                expect(TokenType.L_PAREN);
+                analyseExpr();
+                newIns(Operation.PRINT_C);
+                expect(TokenType.R_PAREN);
+            }
+            case "putln" -> {
+                expect(TokenType.L_PAREN);
+                newIns(Operation.PUSH, (int) '\n');
+                newIns(Operation.PRINT_C);
+                expect(TokenType.R_PAREN);
+            }
         }
     }
-
-    private void AddIns(Operation op)
-    {
-        instructions.add(new Instruction(op));
+    
+    private void newIns(Operation opt, Integer x){
+        instructions.add(new Instruction(opt,(long)x));
     }
-
-    private void AddIns(Operation op,long x)
-    {
-        instructions.add(new Instruction(op,x));
+    private void newIns(Long x){
+        instructions.add(new Instruction(Operation.PUSH, x));
     }
-
-    private void AddCmpIns() throws CompileError
-    {
-        SymbolType lType = TypeStack.pop();
-        SymbolType rType = TypeStack.pop();
-        if(lType != rType){
-            throw new AnalyzeError(ErrorCode.InvalidTypeComparion,peek().getStartPos());
-        }
-        AddIns(Operation.CMP_I);
+    private void newIns(Operation opt){
+        instructions.add(new Instruction(opt));
     }
-
 }

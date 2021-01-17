@@ -2,8 +2,7 @@ package miniplc0java.tokenizer;
 
 import miniplc0java.error.TokenizeError;
 import miniplc0java.error.ErrorCode;
-
-import java.util.regex.Pattern;
+import miniplc0java.util.Pos;
 
 public class Tokenizer {
 
@@ -12,6 +11,8 @@ public class Tokenizer {
     public Tokenizer(StringIter it) {
         this.it = it;
     }
+
+    // 这里本来是想实现 Iterator<Token> 的，但是 Iterator 不允许抛异常，于是就这样了
     /**
      * 获取下一个 Token
      * 
@@ -29,317 +30,249 @@ public class Tokenizer {
         }
 
         char peek = it.peekChar();
+        Token res = null;
         if (Character.isDigit(peek)) {
-            return lexUIntORDouble();
+            res = lexNum();
         } else if (Character.isAlphabetic(peek) || peek == '_') {
-            return lexIdentOrKeyword();
-        } else if (peek == '"'){
-            return lexStringLiteral();
-        } else if (peek == '\'') {
-            return lexCharLiteral();
+            res = lexIdentOrKeyword();
         } else {
-            return lexOperatorOrUnknown();
+            res = lexOperatorOrUnknown();
         }
+        return res;
     }
 
-
-    private Token lexCharLiteral() throws TokenizeError {
-        String s= "";
-        char peek;
-        it.nextChar();
-        Token token=new Token(TokenType.CHAR_LITERAL, "", it.currentPos(), it.currentPos());
-        while(!it.isEOF()){
+    private Token lexNum() throws TokenizeError{
+        String value = "";
+        Pos startPos = it.currentPos();
+        char peek = it.peekChar();
+        while(Character.isDigit(peek)){
+            value += it.nextChar();
             peek = it.peekChar();
-            if(peek != '\'' && peek != '\r' && peek != '\n' && peek != '\t'){
-                if(peek == '\\'){
-                    it.nextChar();
-                    peek = it.peekChar();
-                    if(peek != '\"' && peek != '\\' && peek != '\'' && peek != 'n' && peek != 't' && peek != 'r'){
-                        throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
-                    }
-                    else {
-                        switch (peek) {
-                            case '\\':
-                                s += '\\';
-                                break;
-                            case '\"':
-                                s += '\"';
-                                break;
-                            case '\'':
-                                s += '\'';
-                                break;
-                            case 'n':
-                                s += '\n';
-                                break;
-                            case 't':
-                                s += '\t';
-                                break;
-                            case 'r':
-                                s += '\r';
-                                break;
-                        }
-                    }
-                }
-                else{
-                    s+= peek;
-                }
-                it.nextChar();
-            }
-            if(it.nextChar() != '\''){
-                throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
-            }
-            else {
-                break;
-            }
         }
-        token.setValue(s);
-        token.setEndPos(it.currentPos());
-        return token;
-    }
-
-    private Token lexStringLiteral() throws TokenizeError {
-        String s="";
-        char peek;
-        it.nextChar();
-        Token token=new Token(TokenType.STRING_LITERAL, "", it.currentPos(), it.currentPos());
-        while(!it.isEOF()){
+        if(peek == '.'){
+            value += it.nextChar();
             peek = it.peekChar();
-            if(peek != '"' && peek != '\r' && peek != '\n' && peek != '\t'){
-                if(peek == '\\'){
-                    it.nextChar();
-                    peek = it.peekChar();
-                    if(peek != '"' && peek != '\\' && peek != '\'' && peek != 'n' && peek != 't' && peek != 'r'){
-                        throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
-                    }
-                    else {
-                        switch (peek){
-                            case '\\':
-                                s+= '\\';
-                                break;
-                            case '"':
-                                s+= '\"';
-                                break;
-                            case '\'':
-                                s+= '\'';
-                                break;
-                            case 'n':
-                                s+= '\n';
-                                break;
-                            case 't':
-                                s+= '\t';
-                                break;
-                            case 'r':
-                                s+= '\r';
-                                break;
-                        }
-                        it.nextChar();
-                    }
-                }
-                else{
-                    s+= peek;
-                    it.nextChar();
-                }
-            }
-            else if(peek == '"'){
-                it.nextChar();
-                break;
-            }
-            else throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
-        }
-        token.setValue(s);
-        token.setEndPos(it.currentPos());
-        return token;
-    }
-
-    private Token lexUIntORDouble() throws TokenizeError {
-        //对浮点数的后续附加
-        String digit="";
-        Token token=new Token(TokenType.UINT_LITERAL, "", it.currentPos(), it.currentPos());
-        while(!it.isEOF() && Character.isDigit(it.peekChar())){
-            digit+=it.peekChar();
-            it.nextChar();
-        }
-        if(it.peekChar() == '.'){
-            digit += it.nextChar();
-            token.setTokenType(TokenType.DOUBLE_LITERAL);
-            char peek = it.peekChar();
             if(!Character.isDigit(peek)){
                 throw new TokenizeError(ErrorCode.ExpectedToken,it.currentPos());
             }
             while(Character.isDigit(peek)){
-                digit += it.nextChar();
+                value += it.nextChar();
                 peek = it.peekChar();
             }
             if(peek == 'e' || peek == 'E'){
-                digit += it.nextChar();
+                value += it.nextChar();
                 peek = it.peekChar();
                 if(peek == '+' || peek == '-'){
-                    digit += it.nextChar();
+                    value += it.nextChar();
                     peek = it.peekChar();
                 }
                 if(!Character.isDigit(peek)){
                     throw new TokenizeError(ErrorCode.ExpectedToken,it.currentPos());
                 }
                 while(Character.isDigit(peek)){
-                    digit += it.nextChar();
+                    value += it.nextChar();
                     peek = it.peekChar();
                 }
             }
-            token.setValue(Double.parseDouble(digit));
+            return new Token(TokenType.DOUBLE_LITERAL,value,startPos,it.currentPos());
+        }else{
+            return new Token(TokenType.UINT_LITERAL,value,startPos,it.currentPos());
         }
-        else {
-            token.setValue(Integer.parseInt(digit));
-        }
-        token.setEndPos(it.currentPos());
-        return token;
     }
 
     private Token lexIdentOrKeyword() throws TokenizeError {
-        String s="";
-        Token token=new Token(TokenType.IDENT, "", it.currentPos(), it.currentPos());
-        while(!it.isEOF() && (Character.isLetterOrDigit(it.peekChar()) || it.peekChar() == '_')){
-            s+=it.peekChar();
-            it.nextChar();
+        String value = "";
+        Pos startPos = it.currentPos();
+        char peek = it.peekChar();
+        while (Character.isDigit(peek) || Character.isAlphabetic(peek) || peek == '_'){
+            value += it.nextChar();
+            peek = it.peekChar();
         }
-        token.setValue(s);
-        token.setEndPos(it.currentPos());
-        switch (s){
-            case "fn":
-                token.setTokenType(TokenType.FN_KW);
-                break;
+        return new Token(lexIdentOrKeyword(value),value,startPos,it.currentPos());
+    }
 
-            case "let":
-                token.setTokenType(TokenType.LET_KW);
-                break;
-
-            case "const":
-                token.setTokenType(TokenType.CONST_KW);
-                break;
-
-            case "as":
-                token.setTokenType(TokenType.AS_KW);
-                break;
-
-            case "while":
-                token.setTokenType(TokenType.WHILE_KW);
-                break;
-
-            case "if":
-                token.setTokenType(TokenType.IF_KW);
-                break;
-
-            case "else":
-                token.setTokenType(TokenType.ELSE_KW);
-                break;
-
-            case "return":
-                token.setTokenType(TokenType.RETURN_KW);
-                break;
-
-            case "break":
-                token.setTokenType(TokenType.BREAK_KW);
-                break;
-
-            case "continue":
-                token.setTokenType(TokenType.CONTINUE_KW);
-                break;
-
-            default:
-                break;
+    private TokenType lexIdentOrKeyword(String value){
+        switch (value){
+            case "fn":return TokenType.FN_KW;
+            case "let":return TokenType.LET_KW;
+            case "const":return TokenType.CONST_KW;
+            case "as":return TokenType.AS_KW;
+            case "while":return TokenType.WHILE_KW;
+            case "if":return TokenType.IF_KW;
+            case "else":return TokenType.ELSE_KW;
+            case "return":return TokenType.RETURN_KW;
+            case "break":return TokenType.BREAK_KW;
+            case "continue":return TokenType.CONTINUE_KW;
+            default:return TokenType.IDENT;
         }
-        return token;
     }
 
     private Token lexOperatorOrUnknown() throws TokenizeError {
-        switch (it.nextChar()) {
+        switch (it.peekChar()) {
             case '+':
-                return new Token(TokenType.PLUS, '+', it.previousPos(), it.currentPos());
+                it.nextChar();
+                return new Token(TokenType.PLUS, "+", it.previousPos(), it.currentPos());
 
             case '-':
-                if (it.peekChar() == '>'){
+                it.nextChar();
+                if(it.peekChar() == '>'){
                     it.nextChar();
                     return new Token(TokenType.ARROW, "->", it.previousPos(), it.currentPos());
                 }
-                return new Token(TokenType.MINUS, '-', it.previousPos(), it.currentPos());
+                return new Token(TokenType.MINUS, "-", it.previousPos(), it.currentPos());
 
             case '*':
-                return new Token(TokenType.MUL, '*', it.previousPos(), it.currentPos());
+                it.nextChar();
+                return new Token(TokenType.MUL, "*", it.previousPos(), it.currentPos());
 
             case '/':
+                it.nextChar();
                 if(it.peekChar() == '/'){
                     it.nextChar();
-                    return lexCOMMENT();
+                    while(it.peekChar() != '\n'){
+                        it.nextChar();
+                    }
+                    return nextToken();
                 }
-                return new Token(TokenType.DIV, '/', it.previousPos(), it.currentPos());
+                return new Token(TokenType.DIV, "/", it.previousPos(), it.currentPos());
 
             case '=':
-                if (it.peekChar() == '='){
+                it.nextChar();
+                if(it.peekChar() == '='){
                     it.nextChar();
                     return new Token(TokenType.EQ, "==", it.previousPos(), it.currentPos());
+                }else{
+                    return new Token(TokenType.ASSIGN, "=", it.previousPos(), it.currentPos());
                 }
-                return new Token(TokenType.ASSIGN, '=', it.previousPos(), it.currentPos());
-
             case '!':
-                if (it.peekChar() == '='){
+                it.nextChar();
+                if(it.peekChar() == '=') {
                     it.nextChar();
                     return new Token(TokenType.NEQ, "!=", it.previousPos(), it.currentPos());
+                }else{
+                    throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
                 }
-                throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
-
             case '<':
-                if (it.peekChar() == '='){
+                it.nextChar();
+                if(it.peekChar() == '='){
                     it.nextChar();
                     return new Token(TokenType.LE, "<=", it.previousPos(), it.currentPos());
+                }else{
+                    return new Token(TokenType.LT, "<", it.previousPos(), it.currentPos());
                 }
-                return new Token(TokenType.LT, '<', it.previousPos(), it.currentPos());
-
             case '>':
-                if (it.peekChar() == '='){
+                it.nextChar();
+                if(it.peekChar() == '='){
                     it.nextChar();
                     return new Token(TokenType.GE, ">=", it.previousPos(), it.currentPos());
+                }else{
+                    return new Token(TokenType.GT, ">", it.previousPos(), it.currentPos());
                 }
-                return new Token(TokenType.GT, '>', it.previousPos(), it.currentPos());
-
-
             case '(':
-                return new Token(TokenType.L_PAREN, '(', it.previousPos(), it.currentPos());
-
+                it.nextChar();
+                return new Token(TokenType.L_PAREN, "(", it.previousPos(), it.currentPos());
             case ')':
-                return new Token(TokenType.R_PAREN, ')', it.previousPos(), it.currentPos());
-
+                it.nextChar();
+                return new Token(TokenType.R_PAREN, ")", it.previousPos(), it.currentPos());
             case '{':
-                return new Token(TokenType.L_BRACE, '{', it.previousPos(), it.currentPos());
-
+                it.nextChar();
+                return new Token(TokenType.L_BRACE, "{", it.previousPos(), it.currentPos());
             case '}':
-                return new Token(TokenType.R_BRACE, '}', it.previousPos(), it.currentPos());
-
+                it.nextChar();
+                return new Token(TokenType.R_BRACE, "}", it.previousPos(), it.currentPos());
             case ',':
-                return new Token(TokenType.COMMA, ',', it.previousPos(), it.currentPos());
-
+                it.nextChar();
+                return new Token(TokenType.COMMA, ",", it.previousPos(), it.currentPos());
             case ':':
-                return new Token(TokenType.COLON, ':', it.previousPos(), it.currentPos());
-
+                it.nextChar();
+                return new Token(TokenType.COLON, ":", it.previousPos(), it.currentPos());
             case ';':
-                return new Token(TokenType.SEMICOLON, ';', it.previousPos(), it.currentPos());
-
+                it.nextChar();
+                return new Token(TokenType.SEMICOLON, ";", it.previousPos(), it.currentPos());
+            case '\'':
+                return lexChar();
+            case '"':
+                return lexString();
             default:
                 throw new TokenizeError(ErrorCode.InvalidInput, it.previousPos());
         }
     }
 
-    private Token lexCOMMENT() throws TokenizeError{
-        while (!it.isEOF()){
-            if (it.peekChar() != '\n')
-            {
+    private Token lexChar() throws TokenizeError{
+        if(it.peekChar() == '\''){
+            Pos startPos = it.currentPos();
+            it.nextChar();
+            if(it.peekChar() == '\''){ // 连续两个 ‘
+                throw new TokenizeError(ErrorCode.InvalidInput,it.currentPos());
+            }else if(it.peekChar() == '\\'){ // 遇到转义符
+                it.nextChar(); // 先读取 \
+                String value = "\\";
+                char ch = it.nextChar(); // 读取 \后面的字符
+                value += ch;
                 it.nextChar();
+                if(ch == '\\'){
+                    return new Token(TokenType.UINT_LITERAL,""+(int)'\\',startPos,it.currentPos());
+                }else if(ch == '"'){
+                    return new Token(TokenType.UINT_LITERAL,""+(int)'"',startPos,it.currentPos());
+                }else if(ch == '\''){
+                    return new Token(TokenType.UINT_LITERAL,""+(int)'\'',startPos,it.currentPos());
+                }else if(ch == 'n'){
+                    return new Token(TokenType.UINT_LITERAL,""+(int)'\n',startPos,it.currentPos());
+                }else if(ch == 'r'){
+                    return new Token(TokenType.UINT_LITERAL,""+(int)'\r',startPos,it.currentPos());
+                }else if(ch == 't'){
+                    return new Token(TokenType.UINT_LITERAL,""+(int)'\t',startPos,it.currentPos());
+                }else{
+                    throw new TokenizeError(ErrorCode.InvalidInput,it.currentPos());
+                }
+            }else{ // 其他正常字符
+                String value = ""+ (int) it.nextChar();
+                if(it.nextChar() != '\''){ // 不是 ' 结尾
+                    throw new TokenizeError(ErrorCode.InvalidInput,it.currentPos());
+                }
+                return new Token(TokenType.UINT_LITERAL,value,startPos,it.currentPos());
             }
-            else
-                break;
+        }else{
+            throw new TokenizeError(ErrorCode.InvalidInput,it.currentPos());
         }
-        it.nextChar();
-        return nextToken();
     }
 
+    private Token lexString() throws TokenizeError{
+        Pos startPos = it.currentPos();
+        if(it.nextChar() != '"'){
+            throw new TokenizeError(ErrorCode.InvalidInput,it.currentPos());
+        }
+        char peek = it.nextChar();
+        String value = "";
+        while (peek != '"'){
+            if(peek == '\\'){
+                peek = it.nextChar();
+                if(peek == 'n'){
+                    value += '\n';
+                }else if(peek == 'r'){
+                    value += '\r';
+                }else if(peek == 't'){
+                    value += '\t';
+                }else if(peek == '\\'){
+                    value += '\\';
+                }else if(peek == '\"'){
+                    value += '"';
+                }else if(peek == '\''){
+                    value += '\'';
+                }else{
+                    throw new TokenizeError(ErrorCode.InvalidInput,it.currentPos());
+                }
+            }else {
+                value += peek;
+            }
+            peek = it.nextChar();
+            if(peek == 0){
+                throw new TokenizeError(ErrorCode.InvalidInput,it.currentPos());
+            }
+        }
+
+        return new Token(TokenType.STRING_LITERAL,value,startPos,it.currentPos());
+    }
     private void skipSpaceCharacters() {
         while (!it.isEOF() && Character.isWhitespace(it.peekChar())) {
             it.nextChar();
